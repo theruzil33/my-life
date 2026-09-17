@@ -1,3 +1,4 @@
 .idea
 .opencode
 .env
+**/node_modules/**
