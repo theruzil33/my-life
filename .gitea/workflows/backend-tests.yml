@@ -1,0 +1,28 @@
+name: Backend Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [gateway, tracker]
+    defaults:
+      run:
+        working-directory: backend/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: maven-${{ matrix.service }}-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: maven-${{ matrix.service }}-
+
+      - name: Run tests
+        run: ./mvnw --batch-mode --no-transfer-progress test
