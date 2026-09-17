@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -12,14 +16,17 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.RestClient;
@@ -55,6 +62,21 @@ class ProxyRoutingTest {
 
     @Autowired
     private JwtService jwtService;
+
+    private String csrfToken;
+
+    private String csrfCookieHeader;
+
+    @BeforeEach
+    void bootstrapCsrf() {
+        ResponseEntity<byte[]> response = RestClient.create().get()
+                .uri("http://localhost:" + gatewayPort + "/auth/csrf")
+                .retrieve()
+                .toEntity(byte[].class);
+        String setCookie = response.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
+        csrfToken = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
+        csrfCookieHeader = "XSRF-TOKEN=" + csrfToken;
+    }
 
     @DynamicPropertySource
     static void gatewayRoutes(DynamicPropertyRegistry registry) {
@@ -148,6 +170,86 @@ class ProxyRoutingTest {
         assertThat(STUB_REQUEST_COUNT.get()).isEqualTo(requestsBefore);
     }
 
+    @Test
+    void protectedMutatingRequestWithValidCsrfTokenReachesService() {
+        String bearer = jwtService.issueAccessToken(42L);
+
+        ResponseEntity<byte[]> response = call(HttpMethod.POST, "/tracker/items", bearer, "{\"name\":\"shopping\"}");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(body(response)).contains("\"userId\":\"42\"");
+    }
+
+    @Test
+    void protectedMutatingRequestWithoutCsrfTokenIsRejectedBeforeProxying() {
+        String bearer = jwtService.issueAccessToken(42L);
+        int requestsBefore = STUB_REQUEST_COUNT.get();
+
+        ResponseEntity<byte[]> response = RestClient.create().method(HttpMethod.POST)
+                .uri("http://localhost:" + gatewayPort + "/tracker/items")
+                .headers(headers -> {
+                    headers.setBearerAuth(bearer);
+                    headers.setContentType(MediaType.APPLICATION_JSON);
+                })
+                .body("{\"name\":\"shopping\"}")
+                .exchange((clientRequest, clientResponse) -> {
+                    try {
+                        return ResponseEntity.status(clientResponse.getStatusCode())
+                                .headers(clientResponse.getHeaders())
+                                .body(clientResponse.getBody().readAllBytes());
+                    }
+                    catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                    }
+                });
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(STUB_REQUEST_COUNT.get()).isEqualTo(requestsBefore);
+    }
+
+    @Test
+    void refreshTokenCookieScopedToAuthIsNotForwardedToServices() {
+        CookieManager cookieManager = new CookieManager();
+        cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+        HttpClient httpClient = HttpClient.newBuilder().cookieHandler(cookieManager).build();
+        RestClient browser = RestClient.builder().requestFactory(new JdkClientHttpRequestFactory(httpClient)).build();
+
+        browser.get().uri("http://localhost:" + gatewayPort + "/auth/csrf").retrieve().toBodilessEntity();
+        String token = sessionCsrfToken(cookieManager);
+
+        String email = "user-" + UUID.randomUUID() + "@example.com";
+        browser.post().uri("http://localhost:" + gatewayPort + "/auth/register")
+                .header("X-XSRF-TOKEN", token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"email\":\"" + email + "\",\"password\":\"password123\"}")
+                .retrieve()
+                .toBodilessEntity();
+        browser.post().uri("http://localhost:" + gatewayPort + "/auth/login")
+                .header("X-XSRF-TOKEN", token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"email\":\"" + email + "\",\"password\":\"password123\"}")
+                .retrieve()
+                .toBodilessEntity();
+
+        ResponseEntity<byte[]> response = browser.get().uri("http://localhost:" + gatewayPort + "/tracker/whoami")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.issueAccessToken(42L))
+                .retrieve()
+                .toEntity(byte[].class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(body(response)).contains("\"userId\":\"42\"");
+        assertThat(body(response)).doesNotContain("refresh_token");
+        assertThat(body(response)).contains("\"xsrf\":\"null\"");
+    }
+
+    private String sessionCsrfToken(CookieManager cookieManager) {
+        return cookieManager.getCookieStore().getCookies().stream()
+                .filter(cookie -> cookie.getName().equals("XSRF-TOKEN"))
+                .findFirst()
+                .orElseThrow()
+                .getValue();
+    }
+
     private ResponseEntity<byte[]> call(HttpMethod method, String path, String token, String requestBody) {
         return call(method, path, token, requestBody, null);
     }
@@ -167,6 +269,8 @@ class ProxyRoutingTest {
                     if (spoofedUserId != null) {
                         headers.set(ProxyRoutingFilter.USER_ID_HEADER, spoofedUserId);
                     }
+                    headers.set(HttpHeaders.COOKIE, csrfCookieHeader);
+                    headers.set("X-XSRF-TOKEN", csrfToken);
                 });
         RestClient.RequestHeadersSpec<?> headersSpec = requestBody == null ? spec : spec.body(requestBody);
         return headersSpec.exchange((clientRequest, clientResponse) -> {
@@ -205,6 +309,8 @@ class ProxyRoutingTest {
         payload.put("query", String.valueOf(exchange.getRequestURI().getRawQuery()));
         payload.put("userId", String.valueOf(exchange.getRequestHeaders().getFirst("X-User-Id")));
         payload.put("authorization", String.valueOf(exchange.getRequestHeaders().getFirst("Authorization")));
+        payload.put("cookie", String.valueOf(exchange.getRequestHeaders().getFirst("Cookie")));
+        payload.put("xsrf", String.valueOf(exchange.getRequestHeaders().getFirst("X-XSRF-TOKEN")));
         payload.put("body", new String(requestBody, StandardCharsets.UTF_8));
 
         byte[] body = toJson(payload).getBytes(StandardCharsets.UTF_8);

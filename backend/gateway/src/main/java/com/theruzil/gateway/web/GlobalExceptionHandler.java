@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.theruzil.gateway.auth.EmailAlreadyUsedException;
 import com.theruzil.gateway.auth.InvalidCredentialsException;
 import com.theruzil.gateway.auth.InvalidRegistrationDataException;
+import com.theruzil.gateway.auth.InvalidTokenException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -27,6 +28,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidCredentialsException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ApiError handleInvalidCredentials(InvalidCredentialsException ex) {
+        return new ApiError(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidTokenException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ApiError handleInvalidToken(InvalidTokenException ex) {
         return new ApiError(ex.getMessage());
     }
 }

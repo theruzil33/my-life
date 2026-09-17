@@ -47,6 +47,34 @@ class GatewayPropertiesTest {
                 });
     }
 
+    @Test
+    void providesDefaultAccessTokenAndRefreshTokenSettings() {
+        contextRunner.run(context -> {
+            GatewayProperties properties = context.getBean(GatewayProperties.class);
+
+            assertThat(properties.getJwt().getAccessTokenTtl()).hasSeconds(900);
+            assertThat(properties.getAuth().getRefreshTokenTtl()).hasDays(7);
+            assertThat(properties.getAuth().getCookie().isSecure()).isTrue();
+            assertThat(properties.getAuth().getCookie().getSameSite()).isEqualTo("Strict");
+        });
+    }
+
+    @Test
+    void bindsAuthSettings() {
+        contextRunner
+                .withPropertyValues(
+                        "gateway.auth.refresh-token-ttl=P1D",
+                        "gateway.auth.cookie.secure=false",
+                        "gateway.auth.cookie.same-site=Lax")
+                .run(context -> {
+                    GatewayProperties properties = context.getBean(GatewayProperties.class);
+
+                    assertThat(properties.getAuth().getRefreshTokenTtl()).hasDays(1);
+                    assertThat(properties.getAuth().getCookie().isSecure()).isFalse();
+                    assertThat(properties.getAuth().getCookie().getSameSite()).isEqualTo("Lax");
+                });
+    }
+
     @EnableConfigurationProperties(GatewayProperties.class)
     static class PropertiesConfiguration {
     }

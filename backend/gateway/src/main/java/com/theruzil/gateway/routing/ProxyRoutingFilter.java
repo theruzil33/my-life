@@ -37,7 +37,7 @@ public class ProxyRoutingFilter extends OncePerRequestFilter {
     private static final Set<String> REQUEST_HEADER_BLOCKLIST = Set.of(
             "authorization", "host", "content-length", "connection", "keep-alive", "transfer-encoding", "te",
             "trailer", "upgrade", "proxy-authenticate", "proxy-authorization", "accept-encoding", "expect",
-            USER_ID_HEADER.toLowerCase(Locale.ROOT));
+            "x-xsrf-token", USER_ID_HEADER.toLowerCase(Locale.ROOT));
 
     private static final Set<String> RESPONSE_HEADER_BLOCKLIST = Set.of(
             "connection", "keep-alive", "transfer-encoding", "content-length");

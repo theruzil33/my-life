@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import App from '../src/App'
 import { AuthProvider } from '../src/auth/AuthProvider'
-import { AUTH_STORAGE_KEY, writeStoredSession } from '../src/auth/sessionStorage'
+import { ApiError } from '../src/api/client'
+
+vi.mock('../src/api/authApi', () => ({
+  authApi: { login: vi.fn(), register: vi.fn(), refresh: vi.fn(), logout: vi.fn() },
+}))
+
+import { authApi } from '../src/api/authApi'
 
 function renderApp(initialEntries) {
   return render(
@@ -16,6 +22,12 @@ function renderApp(initialEntries) {
   )
 }
 
+beforeEach(() => {
+  vi.resetAllMocks()
+  authApi.refresh.mockRejectedValue(new ApiError('no session', 401))
+  authApi.logout.mockResolvedValue(null)
+})
+
 describe('App', () => {
   it('показывает форму входа для неаутентифицированного пользователя', () => {
     renderApp(['/login'])
@@ -23,10 +35,10 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Вход' })).toBeInTheDocument()
   })
 
-  it('перенаправляет неаутентифицированного пользователя с защищённой страницы на вход', () => {
+  it('перенаправляет неаутентифицированного пользователя с защищённой страницы на вход', async () => {
     renderApp(['/'])
 
-    expect(screen.getByRole('heading', { name: 'Вход' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Вход' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Выйти' })).not.toBeInTheDocument()
   })
 
@@ -42,15 +54,16 @@ describe('App', () => {
   })
 
   it('показывает email пользователя и выходит из системы по кнопке', async () => {
-    writeStoredSession({ accessToken: 'jwt-token', email: 'user@example.com' })
+    authApi.refresh.mockResolvedValue({ accessToken: 'jwt-token', email: 'user@example.com' })
     const user = userEvent.setup()
     renderApp(['/'])
 
-    expect(screen.getByText(/user@example\.com/)).toBeInTheDocument()
+    expect(await screen.findByText(/user@example\.com/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Выйти' }))
 
-    expect(screen.getByRole('heading', { name: 'Вход' })).toBeInTheDocument()
-    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Вход' })).toBeInTheDocument()
+    expect(authApi.logout).toHaveBeenCalledTimes(1)
+    expect(window.localStorage.getItem('my-life.auth')).toBeNull()
   })
 })

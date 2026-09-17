@@ -4,11 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import RegisterPage from '../../src/pages/RegisterPage'
 import { AuthProvider } from '../../src/auth/AuthProvider'
-import { AUTH_STORAGE_KEY } from '../../src/auth/sessionStorage'
 import { ApiError, SERVER_ERROR_MESSAGE } from '../../src/api/client'
 
 vi.mock('../../src/api/authApi', () => ({
-  authApi: { login: vi.fn(), register: vi.fn() },
+  authApi: { login: vi.fn(), register: vi.fn(), refresh: vi.fn(), logout: vi.fn() },
 }))
 
 import { authApi } from '../../src/api/authApi'
@@ -41,7 +40,8 @@ async function fillAndSubmit(user, { email = 'user@example.com', password = 'sec
 }
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
+  authApi.refresh.mockRejectedValue(new ApiError('no session', 401))
 })
 
 describe('RegisterPage', () => {
@@ -54,7 +54,7 @@ describe('RegisterPage', () => {
 
     expect(authApi.register).toHaveBeenCalledWith('user@example.com', 'secret123')
     expect(await screen.findByRole('status')).toHaveTextContent('успешно зарегистрирован')
-    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem('my-life.auth')).toBeNull()
   })
 
   it('после успешной регистрации предлагает переход ко входу', async () => {
@@ -77,7 +77,7 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Пользователь с таким email уже зарегистрирован')
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem('my-life.auth')).toBeNull()
   })
 
   it('показывает сообщение gateway при 400', async () => {
@@ -128,6 +128,6 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(SERVER_ERROR_MESSAGE)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem('my-life.auth')).toBeNull()
   })
 })
