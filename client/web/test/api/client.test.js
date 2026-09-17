@@ -121,6 +121,20 @@ describe('request', () => {
     })
   })
 
+  it('использует актуальный CSRF-cookie после его ротации сервером', async () => {
+    document.cookie = 'XSRF-TOKEN=first; path=/'
+    const fetchMock = mockFetch(fakeResponse({ status: 200, body: {} }))
+
+    await request('/tracker/habits', { method: 'POST', token: 'access-token', requiresAuth: true })
+    expect(fetchMock.mock.calls[0][1].headers['X-XSRF-TOKEN']).toBe('first')
+
+    document.cookie = 'XSRF-TOKEN=second; path=/'
+    await request('/tracker/habits', { method: 'POST', token: 'access-token', requiresAuth: true })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][1].headers['X-XSRF-TOKEN']).toBe('second')
+  })
+
   it('повторно получает CSRF-токен после отклонения по CSRF', async () => {
     document.cookie = 'XSRF-TOKEN=stale; path=/'
     const fetchMock = vi
