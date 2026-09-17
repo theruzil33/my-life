@@ -3,6 +3,7 @@ package com.theruzil.gateway.security;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static com.theruzil.gateway.testsupport.CsrfTestSupport.csrf;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -38,7 +39,7 @@ class JwtSecurityTest {
 
     @Test
     void registrationEndpointDoesNotRequireToken() throws Exception {
-        mockMvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/auth/register").with(csrf(mockMvc)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + uniqueEmail() + "\",\"password\":\"password123\"}"))
                 .andExpect(status().isCreated());
     }
@@ -46,11 +47,11 @@ class JwtSecurityTest {
     @Test
     void loginEndpointDoesNotRequireToken() throws Exception {
         String email = uniqueEmail();
-        mockMvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/auth/register").with(csrf(mockMvc)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + email + "\",\"password\":\"password123\"}"))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/auth/login").with(csrf(mockMvc)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + email + "\",\"password\":\"password123\"}"))
                 .andExpect(status().isOk());
     }

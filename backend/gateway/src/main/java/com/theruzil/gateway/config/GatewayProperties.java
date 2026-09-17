@@ -11,6 +11,7 @@ public class GatewayProperties {
 
     private final List<Route> routes = new ArrayList<>();
     private final Jwt jwt = new Jwt();
+    private final Auth auth = new Auth();
 
     public List<Route> getRoutes() {
         return routes;
@@ -18,6 +19,10 @@ public class GatewayProperties {
 
     public Jwt getJwt() {
         return jwt;
+    }
+
+    public Auth getAuth() {
+        return auth;
     }
 
     public static class Route {
@@ -45,7 +50,7 @@ public class GatewayProperties {
     public static class Jwt {
 
         private String secret;
-        private Duration accessTokenTtl = Duration.ofHours(1);
+        private Duration accessTokenTtl = Duration.ofMinutes(15);
 
         public String getSecret() {
             return secret;
@@ -61,6 +66,46 @@ public class GatewayProperties {
 
         public void setAccessTokenTtl(Duration accessTokenTtl) {
             this.accessTokenTtl = accessTokenTtl;
+        }
+    }
+
+    public static class Auth {
+
+        private Duration refreshTokenTtl = Duration.ofDays(7);
+        private final Cookie cookie = new Cookie();
+
+        public Duration getRefreshTokenTtl() {
+            return refreshTokenTtl;
+        }
+
+        public void setRefreshTokenTtl(Duration refreshTokenTtl) {
+            this.refreshTokenTtl = refreshTokenTtl;
+        }
+
+        public Cookie getCookie() {
+            return cookie;
+        }
+
+        public static class Cookie {
+
+            private boolean secure = true;
+            private String sameSite = "Strict";
+
+            public boolean isSecure() {
+                return secure;
+            }
+
+            public void setSecure(boolean secure) {
+                this.secure = secure;
+            }
+
+            public String getSameSite() {
+                return sameSite;
+            }
+
+            public void setSameSite(String sameSite) {
+                this.sameSite = sameSite;
+            }
         }
     }
 }

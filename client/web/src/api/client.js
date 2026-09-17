@@ -12,13 +12,26 @@ export const NETWORK_ERROR_MESSAGE =
   'Не удалось выполнить запрос. Проверьте подключение и попробуйте снова.'
 export const SERVER_ERROR_MESSAGE = 'Сервис временно недоступен. Попробуйте позже.'
 export const DEFAULT_ERROR_MESSAGE = 'Не удалось выполнить запрос.'
+export const CSRF_ERROR_MESSAGE = 'Не удалось подтвердить безопасность запроса. Попробуйте снова.'
 
 const MISSING_TOKEN_MESSAGE = 'Для выполнения запроса требуется авторизация.'
 
+const CSRF_COOKIE_NAME = 'XSRF-TOKEN'
+const CSRF_HEADER_NAME = 'X-XSRF-TOKEN'
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
 let unauthorizedHandler = null
+let sessionRefresher = null
+let cachedCsrfToken = null
+let csrfNeedsRefresh = false
+let refreshPromise = null
 
 export function setUnauthorizedHandler(handler) {
   unauthorizedHandler = handler
+}
+
+export function setSessionRefresher(refresher) {
+  sessionRefresher = refresher
 }
 
 function notifyUnauthorized() {
@@ -40,6 +53,9 @@ async function readBody(response) {
 }
 
 function errorMessageFor(status, data) {
+  if (status === 403) {
+    return CSRF_ERROR_MESSAGE
+  }
   if (data && typeof data.message === 'string' && data.message.trim() !== '') {
     return data.message
   }
@@ -49,11 +65,72 @@ function errorMessageFor(status, data) {
   return DEFAULT_ERROR_MESSAGE
 }
 
-export async function request(path, { method = 'GET', body, token, requiresAuth = false } = {}) {
+export function readCsrfCookie() {
+  if (typeof document === 'undefined' || typeof document.cookie !== 'string') {
+    return null
+  }
+  const entry = document.cookie.split('; ').find((row) => row.startsWith(`${CSRF_COOKIE_NAME}=`))
+  return entry ? decodeURIComponent(entry.slice(CSRF_COOKIE_NAME.length + 1)) : null
+}
+
+async function ensureCsrfToken() {
+  if (cachedCsrfToken) {
+    return cachedCsrfToken
+  }
+  if (!csrfNeedsRefresh) {
+    const fromCookie = readCsrfCookie()
+    if (fromCookie) {
+      cachedCsrfToken = fromCookie
+      return cachedCsrfToken
+    }
+  }
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/csrf`, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+    const data = response.ok ? await readBody(response) : null
+    cachedCsrfToken = typeof data?.token === 'string' ? data.token : readCsrfCookie()
+  } catch {
+    cachedCsrfToken = readCsrfCookie()
+  }
+  csrfNeedsRefresh = false
+  return cachedCsrfToken
+}
+
+export function clearCsrfToken() {
+  cachedCsrfToken = null
+  csrfNeedsRefresh = false
+}
+
+function invalidateCsrfToken() {
+  cachedCsrfToken = null
+  csrfNeedsRefresh = true
+}
+
+function refreshSession() {
+  if (!sessionRefresher) {
+    return Promise.resolve(null)
+  }
+  if (!refreshPromise) {
+    refreshPromise = Promise.resolve()
+      .then(() => sessionRefresher())
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
+export async function request(
+  path,
+  { method = 'GET', body, token, requiresAuth = false, retry = true } = {},
+) {
   if (requiresAuth && !token) {
     throw new ApiError(MISSING_TOKEN_MESSAGE, 401)
   }
 
+  const isMutating = !SAFE_METHODS.has(method.toUpperCase())
   const headers = { Accept: 'application/json' }
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -61,12 +138,19 @@ export async function request(path, { method = 'GET', body, token, requiresAuth 
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }
+  if (isMutating) {
+    const csrfToken = await ensureCsrfToken()
+    if (csrfToken) {
+      headers[CSRF_HEADER_NAME] = csrfToken
+    }
+  }
 
   let response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
+      credentials: 'include',
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
@@ -76,9 +160,25 @@ export async function request(path, { method = 'GET', body, token, requiresAuth 
   const data = await readBody(response)
 
   if (!response.ok) {
+    if (isMutating && response.status === 403) {
+      invalidateCsrfToken()
+    }
+
     if (requiresAuth && response.status === 401) {
+      if (retry) {
+        let refreshedToken
+        try {
+          refreshedToken = await refreshSession()
+        } catch {
+          refreshedToken = null
+        }
+        if (refreshedToken) {
+          return request(path, { method, body, token: refreshedToken, requiresAuth, retry: false })
+        }
+      }
       notifyUnauthorized()
     }
+
     throw new ApiError(errorMessageFor(response.status, data), response.status)
   }
 
