@@ -29,31 +29,27 @@ jobs:
     needs: tag
     if: needs.tag.outputs.valid == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: gateway
-            context: ./backend/gateway
-          - name: tracker
-            context: ./backend/tracker
-          - name: web
-            context: ./client/web
     steps:
       - uses: actions/checkout@v4
 
       - name: Log in to Docker Hub
-        run: |
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login \
-            -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-
-      - name: Build and push my-life-${{ matrix.name }}
         env:
-          # podman не поддерживает BuildKit, поэтому используем классический builder.
-          # При работе на Docker эту переменную можно убрать.
-          DOCKER_BUILDKIT: "0"
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          image="${{ secrets.DOCKERHUB_USERNAME }}/my-life-${{ matrix.name }}"
-          version="${{ needs.tag.outputs.version }}"
-          docker build -t "$image:$version" "${{ matrix.context }}"
-          docker push "$image:$version"
+          echo "$DOCKERHUB_TOKEN" | docker login \
+            -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Build and push images
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          build() {
+            docker buildx build --push \
+              -t "$DOCKERHUB_USERNAME/$1:$VERSION" "$2"
+          }
+          build my-life-gateway ./backend/gateway
+          build my-life-tracker ./backend/tracker
+          build my-life-web     ./client/web
