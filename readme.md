@@ -101,8 +101,49 @@ git tag v1.1.1
 git push origin v1.1.1
 ```
 
-Требования к runner: доступ к Docker (docker-режим или смонтированный
-`/var/run/docker.sock`) и доступ в интернет для `docker push`.
+Требования к runner: доступ к Docker и интернет для `docker push`.
+
+Если при публикации появляется ошибка
+`failed to connect to the docker API at unix:///var/run/docker.sock`,
+значит контейнер задания не видит Docker-демон. Прокиньте сокет в runner:
+в `config.yml` act_runner добавьте
+
+```yaml
+container:
+  options: "-v /var/run/docker.sock:/var/run/docker.sock"
+  valid_volumes:
+    - /var/run/docker.sock
+```
+
+Если сам runner запущен как контейнер, сокет нужно смонтировать и в него:
+
+```bash
+docker run -d --name gitea-runner \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v $(pwd)/runner-data:/data \
+  gitea/act_runner:latest
+```
+
+**Rootless podman.** Если runner использует rootless podman (сокет
+`/run/user/<uid>/podman/podman.sock`), в `container.options` и
+`container.valid_volumes` нужно указывать **хост-путь** сокета, а не путь
+внутри контейнера runner'а:
+
+```yaml
+container:
+  options: "-v /run/user/1000/podman/podman.sock:/var/run/docker.sock"
+  valid_volumes:
+    - /run/user/1000/podman/podman.sock
+```
+
+При пустом `valid_volumes` volume из `options` не монтируется, поэтому путь
+обязательно нужно там перечислить.
+
+После правки перезапустите runner.
+
+Безопаснее не давать доступ к сокету всем заданиям, а зарегистрировать
+отдельный runner с меткой `docker`, смонтировать сокет только на нём и указать
+в workflow `runs-on: docker`.
 
 ## Переменные окружения
 

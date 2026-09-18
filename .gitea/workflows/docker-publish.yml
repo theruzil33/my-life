@@ -48,6 +48,10 @@ jobs:
             -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Build and push my-life-${{ matrix.name }}
+        env:
+          # podman не поддерживает BuildKit, поэтому используем классический builder.
+          # При работе на Docker эту переменную можно убрать.
+          DOCKER_BUILDKIT: "0"
         run: |
           image="${{ secrets.DOCKERHUB_USERNAME }}/my-life-${{ matrix.name }}"
           version="${{ needs.tag.outputs.version }}"
