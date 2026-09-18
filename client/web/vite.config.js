@@ -10,6 +10,10 @@ export default defineConfig({
         target: process.env.GATEWAY_URL ?? 'http://localhost:8080',
         changeOrigin: true,
       },
+      '/tracker': {
+        target: process.env.GATEWAY_URL ?? 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
   test: {

@@ -3,6 +3,7 @@ import { RequireAuth } from './auth/RequireAuth'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import TrackerPage from './pages/TrackerPage'
 import './App.css'
 
 function App() {
@@ -15,6 +16,14 @@ function App() {
         element={
           <RequireAuth>
             <HomePage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/tracker"
+        element={
+          <RequireAuth>
+            <TrackerPage />
           </RequireAuth>
         }
       />

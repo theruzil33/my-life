@@ -1,0 +1,100 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import TrackerPage from '../../src/pages/TrackerPage'
+import { AuthProvider } from '../../src/auth/AuthProvider'
+import { RequireAuth } from '../../src/auth/RequireAuth'
+import { ApiError } from '../../src/api/client'
+
+vi.mock('../../src/api/authApi', () => ({
+  authApi: { login: vi.fn(), register: vi.fn(), refresh: vi.fn(), logout: vi.fn() },
+}))
+
+vi.mock('../../src/api/trackerApi', () => ({
+  trackerApi: {
+    listOnDate: vi.fn(),
+    history: vi.fn(),
+    create: vi.fn(),
+    markCompleted: vi.fn(),
+    unmarkCompleted: vi.fn(),
+  },
+}))
+
+import { authApi } from '../../src/api/authApi'
+import { trackerApi } from '../../src/api/trackerApi'
+
+function renderTracker() {
+  return render(
+    <MemoryRouter initialEntries={['/tracker']}>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<p>Форма входа</p>} />
+          <Route
+            path="/tracker"
+            element={
+              <RequireAuth>
+                <TrackerPage />
+              </RequireAuth>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </MemoryRouter>,
+  )
+}
+
+beforeEach(() => {
+  vi.resetAllMocks()
+  authApi.refresh.mockResolvedValue({ accessToken: 'jwt-token', email: 'user@example.com' })
+  trackerApi.listOnDate.mockResolvedValue([])
+  trackerApi.history.mockResolvedValue([])
+})
+
+describe('TrackerPage', () => {
+  it('по умолчанию открывает вкладку привычек', async () => {
+    renderTracker()
+
+    expect(await screen.findByRole('heading', { name: 'Трекер привычек' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Привычки' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Дата')).toBeInTheDocument()
+    expect(screen.queryByLabelText('С')).not.toBeInTheDocument()
+  })
+
+  it('переключается на вкладку статистики', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await user.click(screen.getByRole('tab', { name: 'Статистика' }))
+
+    expect(screen.getByRole('tab', { name: 'Статистика' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(await screen.findByLabelText('С')).toBeVisible()
+    expect(screen.getByLabelText('Дата')).not.toBeVisible()
+  })
+
+  it('сохраняет выбранную дату при переключении вкладок', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    const dateInput = await screen.findByLabelText('Дата')
+    fireEvent.change(dateInput, { target: { value: '2026-09-10' } })
+    expect(dateInput.value).toBe('2026-09-10')
+
+    await user.click(screen.getByRole('tab', { name: 'Статистика' }))
+    await user.click(screen.getByRole('tab', { name: 'Привычки' }))
+
+    expect(screen.getByLabelText('Дата').value).toBe('2026-09-10')
+  })
+
+  it('перенаправляет неаутентифицированного пользователя на вход', async () => {
+    authApi.refresh.mockRejectedValue(new ApiError('no session', 401))
+    renderTracker()
+
+    expect(await screen.findByText('Форма входа')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Трекер привычек' })).not.toBeInTheDocument()
+  })
+})

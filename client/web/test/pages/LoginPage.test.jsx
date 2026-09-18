@@ -65,7 +65,7 @@ describe('LoginPage', () => {
     await fillAndSubmit(user)
 
     expect(authApi.login).toHaveBeenCalledWith('user@example.com', 'secret123')
-    expect(await screen.findByText('Вы вошли в систему')).toBeInTheDocument()
+    expect(await screen.findByText('Мои приложения')).toBeInTheDocument()
     expect(screen.getByText(/user@example\.com/)).toBeInTheDocument()
     expect(JSON.stringify(window.localStorage)).not.toContain('jwt-token')
   })
@@ -115,7 +115,7 @@ describe('LoginPage', () => {
 
     resolve({ accessToken: 'jwt-token', email: 'user@example.com' })
 
-    await waitFor(() => expect(screen.getByText('Вы вошли в систему')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Мои приложения')).toBeInTheDocument())
   })
 
   it('показывает сообщение о невозможности выполнить запрос при сетевой ошибке', async () => {

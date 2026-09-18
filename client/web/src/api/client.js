@@ -74,13 +74,13 @@ export function readCsrfCookie() {
 }
 
 async function ensureCsrfToken() {
-  if (cachedCsrfToken) {
-    return cachedCsrfToken
-  }
   if (!csrfNeedsRefresh) {
     const fromCookie = readCsrfCookie()
     if (fromCookie) {
       cachedCsrfToken = fromCookie
+      return cachedCsrfToken
+    }
+    if (cachedCsrfToken) {
       return cachedCsrfToken
     }
   }
