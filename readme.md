@@ -74,6 +74,36 @@ docker compose down          # остановить
 docker compose down -v       # остановить и удалить данные БД (volume postgres-data)
 ```
 
+## Публикация Docker-образов (Gitea Actions)
+
+Workflow `.gitea/workflows/docker-publish.yml` собирает и публикует образы в
+Docker Hub при пуше тега вида `v<число>.<число>.<число>`, например `v1.1.1`.
+Теги, не подходящие под маску, workflow игнорирует.
+
+Перед использованием добавьте в репозитории Gitea
+(**Settings → Actions → Secrets**) два секрета:
+
+| Секрет | Описание |
+| --- | --- |
+| `DOCKERHUB_USERNAME` | Логин Docker Hub |
+| `DOCKERHUB_TOKEN` | [Access Token](https://hub.docker.com/settings/security) Docker Hub (не пароль) |
+
+Публикуются три образа:
+
+- `<DOCKERHUB_USERNAME>/my-life-gateway:<тег>`
+- `<DOCKERHUB_USERNAME>/my-life-tracker:<тег>`
+- `<DOCKERHUB_USERNAME>/my-life-web:<тег>`
+
+Запуск публикации:
+
+```bash
+git tag v1.1.1
+git push origin v1.1.1
+```
+
+Требования к runner: доступ к Docker (docker-режим или смонтированный
+`/var/run/docker.sock`) и доступ в интернет для `docker push`.
+
 ## Переменные окружения
 
 Все переменные задаются в файле `.env` в корне проекта (см. `.env.example`).
