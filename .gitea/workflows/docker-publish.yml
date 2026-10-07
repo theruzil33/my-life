@@ -1,0 +1,55 @@
+name: Publish Docker Images
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      valid: ${{ steps.parse.outputs.valid }}
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      - name: Validate tag matches vD.D.D
+        id: parse
+        run: |
+          ref="${{ github.ref }}"
+          tag="${ref#refs/tags/}"
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "Tag '$tag' does not match vD.D.D, skipping publish."
+          fi
+
+  publish:
+    needs: tag
+    if: needs.tag.outputs.valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          echo "$DOCKERHUB_TOKEN" | docker login \
+            -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Build and push images
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          build() {
+            docker buildx build --push \
+              -t "$DOCKERHUB_USERNAME/$1:$VERSION" "$2"
+          }
+          build my-life-gateway ./backend/gateway
+          build my-life-tracker ./backend/tracker
+          build my-life-web     ./client/web
