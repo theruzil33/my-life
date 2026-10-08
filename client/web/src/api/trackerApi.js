@@ -11,21 +11,50 @@ function withQuery(path, params) {
   return serialized === '' ? path : `${path}?${serialized}`
 }
 
+function activityBody({ name, startDate, frequency, weekdays, type, markPastCompleted }) {
+  const body = { name, startDate, frequency, type }
+  if (frequency === 'SPECIFIC_WEEKDAYS') {
+    body.weekdays = weekdays ?? []
+  }
+  if (markPastCompleted !== undefined && markPastCompleted !== null) {
+    body.markPastCompleted = markPastCompleted
+  }
+  return body
+}
+
 export const trackerApi = {
-  listOnDate(token, date) {
-    return request(withQuery('/tracker/habits', { date }), { token, requiresAuth: true })
+  listOnDate(token, date, type) {
+    return request(withQuery('/tracker/habits', { date, type }), { token, requiresAuth: true })
   },
 
   history(token, from, to) {
     return request(withQuery('/tracker/habits/history', { from, to }), { token, requiresAuth: true })
   },
 
-  create(token, { name, startDate, frequency, weekdays }) {
-    const body = { name, startDate, frequency }
-    if (frequency === 'SPECIFIC_WEEKDAYS') {
-      body.weekdays = weekdays ?? []
-    }
-    return request('/tracker/habits', { method: 'POST', body, token, requiresAuth: true })
+  create(token, definition) {
+    return request('/tracker/habits', {
+      method: 'POST',
+      body: activityBody(definition),
+      token,
+      requiresAuth: true,
+    })
+  },
+
+  update(token, id, definition) {
+    return request(`/tracker/habits/${id}`, {
+      method: 'PUT',
+      body: activityBody(definition),
+      token,
+      requiresAuth: true,
+    })
+  },
+
+  remove(token, id) {
+    return request(`/tracker/habits/${id}`, {
+      method: 'DELETE',
+      token,
+      requiresAuth: true,
+    })
   },
 
   markCompleted(token, habitId, date) {

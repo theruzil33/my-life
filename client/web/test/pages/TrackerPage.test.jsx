@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import TrackerPage from '../../src/pages/TrackerPage'
@@ -74,6 +74,34 @@ describe('TrackerPage', () => {
     )
     expect(await screen.findByLabelText('С')).toBeVisible()
     expect(screen.getByLabelText('Дата')).not.toBeVisible()
+  })
+
+  it('переключается на вкладку задач и грузит только задачи', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await user.click(screen.getByRole('tab', { name: 'Задачи' }))
+
+    expect(screen.getByRole('tab', { name: 'Задачи' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() =>
+      expect(trackerApi.listOnDate).toHaveBeenCalledWith('jwt-token', expect.any(String), 'TASK'),
+    )
+    expect(await screen.findByText('На выбранную дату задач нет.')).toBeInTheDocument()
+  })
+
+  it('сохраняет выбранную дату вкладки привычек после открытия задач', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    fireEvent.change(document.getElementById('habits-date'), { target: { value: '2026-09-10' } })
+    expect(document.getElementById('habits-date').value).toBe('2026-09-10')
+
+    await user.click(screen.getByRole('tab', { name: 'Задачи' }))
+    await user.click(screen.getByRole('tab', { name: 'Привычки' }))
+
+    expect(document.getElementById('habits-date').value).toBe('2026-09-10')
   })
 
   it('сохраняет выбранную дату при переключении вкладок', async () => {

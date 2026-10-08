@@ -48,9 +48,23 @@ class HabitRepositoryTest {
         save(randomUserId(), "other-user", DATE.minusDays(7), HabitFrequency.DAILY, Set.of());
 
         List<Habit> found = habitRepository.findScheduledOn(userId, DATE, DATE.getDayOfWeek(),
-                HabitFrequency.DAILY);
+                HabitFrequency.DAILY, null);
 
         assertThat(found).extracting(Habit::getId).containsExactlyInAnyOrder(daily.getId(), matching.getId());
+    }
+
+    @Test
+    void findScheduledOnFiltersByType() {
+        Habit habit = save(userId, "habit", DATE.minusDays(7), HabitFrequency.DAILY, Set.of());
+        Habit task = saveTyped(userId, ActivityType.TASK, "task", DATE.minusDays(7), HabitFrequency.DAILY, Set.of());
+
+        List<Habit> tasks = habitRepository.findScheduledOn(userId, DATE, DATE.getDayOfWeek(),
+                HabitFrequency.DAILY, ActivityType.TASK);
+        List<Habit> habits = habitRepository.findScheduledOn(userId, DATE, DATE.getDayOfWeek(),
+                HabitFrequency.DAILY, ActivityType.HABIT);
+
+        assertThat(tasks).extracting(Habit::getId).containsExactly(task.getId());
+        assertThat(habits).extracting(Habit::getId).containsExactly(habit.getId());
     }
 
     @Test
@@ -81,6 +95,15 @@ class HabitRepositoryTest {
     }
 
     @Test
+    void findStartedByReturnsBothTypes() {
+        Habit habit = save(userId, "habit", DATE, HabitFrequency.DAILY, Set.of());
+        Habit task = saveTyped(userId, ActivityType.TASK, "task", DATE, HabitFrequency.DAILY, Set.of());
+
+        assertThat(habitRepository.findStartedBy(userId, DATE)).extracting(Habit::getId)
+                .containsExactlyInAnyOrder(habit.getId(), task.getId());
+    }
+
+    @Test
     void persistsIsoWeekdayNumbers() {
         Habit habit = save(userId, "weekdays", DATE, HabitFrequency.SPECIFIC_WEEKDAYS,
                 Set.of(DayOfWeek.MONDAY, DayOfWeek.SUNDAY));
@@ -92,9 +115,43 @@ class HabitRepositoryTest {
         assertThat(reloaded.getWeekdays()).containsExactlyInAnyOrder(DayOfWeek.MONDAY, DayOfWeek.SUNDAY);
     }
 
+    @Test
+    void persistsActivityType() {
+        Habit task = saveTyped(userId, ActivityType.TASK, "task", DATE, HabitFrequency.DAILY, Set.of());
+        entityManager.flush();
+        entityManager.clear();
+
+        Habit reloaded = habitRepository.findById(task.getId()).orElseThrow();
+
+        assertThat(reloaded.getType()).isEqualTo(ActivityType.TASK);
+    }
+
+    @Test
+    void deletingActivityRemovesItsWeekdays() {
+        Habit habit = save(userId, "weekdays", DATE, HabitFrequency.SPECIFIC_WEEKDAYS,
+                Set.of(DayOfWeek.MONDAY, DayOfWeek.TUESDAY));
+        Long habitId = habit.getId();
+
+        habitRepository.delete(habit);
+        habitRepository.flush();
+
+        Number remaining = (Number) entityManager
+                .createNativeQuery("select count(*) from tracker_habit_weekdays where habit_id = :id")
+                .setParameter("id", habitId)
+                .getSingleResult();
+
+        assertThat(remaining.longValue()).isZero();
+        assertThat(habitRepository.findById(habitId)).isEmpty();
+    }
+
     private Habit save(Long ownerId, String name, LocalDate startDate, HabitFrequency frequency,
             Set<DayOfWeek> weekdays) {
-        return habitRepository.saveAndFlush(new Habit(ownerId, name, startDate, frequency, weekdays, NOW));
+        return saveTyped(ownerId, ActivityType.HABIT, name, startDate, frequency, weekdays);
+    }
+
+    private Habit saveTyped(Long ownerId, ActivityType type, String name, LocalDate startDate,
+            HabitFrequency frequency, Set<DayOfWeek> weekdays) {
+        return habitRepository.saveAndFlush(new Habit(ownerId, type, name, startDate, frequency, weekdays, NOW));
     }
 
     private static Long randomUserId() {

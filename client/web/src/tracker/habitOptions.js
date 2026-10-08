@@ -1,3 +1,8 @@
+export const ACTIVITY_TYPE = {
+  HABIT: 'HABIT',
+  TASK: 'TASK',
+}
+
 export const FREQUENCY = {
   DAILY: 'DAILY',
   SPECIFIC_WEEKDAYS: 'SPECIFIC_WEEKDAYS',

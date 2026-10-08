@@ -34,7 +34,8 @@ class HabitCompletionRepositoryTest {
     @BeforeEach
     void createHabit() {
         habitId = habitRepository
-                .saveAndFlush(new Habit(randomUserId(), "habit", DATE, HabitFrequency.DAILY, Set.of(), NOW))
+                .saveAndFlush(new Habit(randomUserId(), ActivityType.HABIT, "habit", DATE, HabitFrequency.DAILY,
+                        Set.of(), NOW))
                 .getId();
     }
 
@@ -68,7 +69,8 @@ class HabitCompletionRepositoryTest {
     @Test
     void findsCompletionsWithinRangeForGivenHabits() {
         Long otherHabitId = habitRepository
-                .saveAndFlush(new Habit(randomUserId(), "other", DATE, HabitFrequency.DAILY, Set.of(), NOW))
+                .saveAndFlush(new Habit(randomUserId(), ActivityType.HABIT, "other", DATE, HabitFrequency.DAILY,
+                        Set.of(), NOW))
                 .getId();
         completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, NOW));
         completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE.minusDays(10), NOW));
@@ -78,6 +80,17 @@ class HabitCompletionRepositoryTest {
                 DATE.minusDays(1), DATE);
 
         assertThat(found).extracting(HabitCompletion::getCompletedOn).containsExactly(DATE);
+    }
+
+    @Test
+    void deletingHabitCascadesCompletionRemoval() {
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, NOW));
+        Habit habit = habitRepository.findById(habitId).orElseThrow();
+
+        habitRepository.delete(habit);
+        habitRepository.flush();
+
+        assertThat(completionRepository.existsByHabitIdAndCompletedOn(habitId, DATE)).isFalse();
     }
 
     private static Long randomUserId() {

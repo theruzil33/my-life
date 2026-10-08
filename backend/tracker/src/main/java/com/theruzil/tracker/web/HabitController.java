@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.theruzil.tracker.habit.ActivityType;
 import com.theruzil.tracker.habit.HabitService;
 import com.theruzil.tracker.habit.dto.HabitHistoryResponse;
 import com.theruzil.tracker.habit.dto.HabitOnDateResponse;
@@ -46,10 +47,17 @@ public class HabitController {
         return habitService.update(userId, id, request);
     }
 
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@RequestAttribute(UserIdFilter.USER_ID_ATTRIBUTE) Long userId, @PathVariable Long id) {
+        habitService.delete(userId, id);
+    }
+
     @GetMapping
     public List<HabitOnDateResponse> listOnDate(@RequestAttribute(UserIdFilter.USER_ID_ATTRIBUTE) Long userId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return habitService.listOnDate(userId, date);
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) ActivityType type) {
+        return habitService.listOnDate(userId, date, type);
     }
 
     @GetMapping("/history")

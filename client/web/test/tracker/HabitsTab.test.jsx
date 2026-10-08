@@ -13,6 +13,8 @@ vi.mock('../../src/api/trackerApi', () => ({
     listOnDate: vi.fn(),
     history: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
     markCompleted: vi.fn(),
     unmarkCompleted: vi.fn(),
   },
@@ -67,6 +69,11 @@ async function openModal(user) {
   return screen.getByRole('dialog')
 }
 
+async function openRename(user, name) {
+  await user.click(screen.getByRole('button', { name: `Переименовать ${name}` }))
+  return screen.getByRole('dialog')
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
   trackerApi.listOnDate.mockResolvedValue(dailyHabits)
@@ -79,7 +86,7 @@ describe('HabitsTab', () => {
 
     expect(await screen.findByText('Зарядка')).toBeInTheDocument()
     expect(screen.getByText('Чтение')).toBeInTheDocument()
-    expect(trackerApi.listOnDate).toHaveBeenCalledWith('token', TODAY)
+    expect(trackerApi.listOnDate).toHaveBeenCalledWith('token', TODAY, 'HABIT')
   })
 
   it('показывает пустое состояние', async () => {
@@ -106,7 +113,9 @@ describe('HabitsTab', () => {
     await screen.findByText('Зарядка')
     fireEvent.change(screen.getByLabelText('Дата'), { target: { value: '2026-09-10' } })
 
-    await waitFor(() => expect(trackerApi.listOnDate).toHaveBeenCalledWith('token', '2026-09-10'))
+    await waitFor(() =>
+      expect(trackerApi.listOnDate).toHaveBeenCalledWith('token', '2026-09-10', 'HABIT'),
+    )
     expect(await screen.findByRole('checkbox', { name: 'Зарядка' })).toBeChecked()
   })
 
@@ -119,7 +128,7 @@ describe('HabitsTab', () => {
     fireEvent.change(dateInput, { target: { value: '2026-09-18' } })
 
     expect(dateInput.value).toBe(TODAY)
-    expect(trackerApi.listOnDate).not.toHaveBeenCalledWith('token', '2026-09-18')
+    expect(trackerApi.listOnDate).not.toHaveBeenCalledWith('token', '2026-09-18', 'HABIT')
   })
 
   it('отмечает выполнение привычки', async () => {
@@ -207,17 +216,17 @@ describe('HabitsTab', () => {
     expect(trackerApi.create).not.toHaveBeenCalled()
   })
 
-  it('отклоняет создание с датой начала в прошлом', async () => {
+  it('отклоняет создание с датой начала в будущем', async () => {
     const user = userEvent.setup()
     render(<HabitsTab />)
     await screen.findByText('Зарядка')
 
     await openModal(user)
     await user.type(screen.getByLabelText('Название'), 'Новая')
-    fireEvent.change(screen.getByLabelText('Дата начала'), { target: { value: '2026-09-16' } })
+    fireEvent.change(screen.getByLabelText('Дата начала'), { target: { value: '2026-09-18' } })
     await user.click(screen.getByRole('button', { name: 'Создать' }))
 
-    expect(await screen.findByText('Дата начала не может быть раньше сегодняшней')).toBeInTheDocument()
+    expect(await screen.findByText('Дата начала не может быть позже сегодняшней')).toBeInTheDocument()
     expect(trackerApi.create).not.toHaveBeenCalled()
   })
 
@@ -251,6 +260,7 @@ describe('HabitsTab', () => {
         startDate: TODAY,
         frequency: 'DAILY',
         weekdays: [],
+        type: 'HABIT',
       }),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -274,23 +284,57 @@ describe('HabitsTab', () => {
         startDate: TODAY,
         frequency: 'SPECIFIC_WEEKDAYS',
         weekdays: ['MONDAY'],
+        type: 'HABIT',
       }),
     )
   })
 
-  it('привычка с будущей датой начала не появляется в списке на сегодня', async () => {
+  it('создаёт привычку с прошлой датой начала', async () => {
     const user = userEvent.setup()
-    trackerApi.listOnDate.mockResolvedValue([])
     render(<HabitsTab />)
-    await screen.findByText('На выбранную дату привычек нет.')
+    await screen.findByText('Зарядка')
 
     await openModal(user)
     await user.type(screen.getByLabelText('Название'), 'Йога')
-    fireEvent.change(screen.getByLabelText('Дата начала'), { target: { value: '2026-09-20' } })
+    fireEvent.change(screen.getByLabelText('Дата начала'), { target: { value: '2026-09-10' } })
     await user.click(screen.getByRole('button', { name: 'Создать' }))
 
+    await waitFor(() =>
+      expect(trackerApi.create).toHaveBeenCalledWith('token', {
+        name: 'Йога',
+        startDate: '2026-09-10',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+      }),
+    )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(await screen.findByText('На выбранную дату привычек нет.')).toBeInTheDocument()
+  })
+
+  it('отправляет признак отметки прошлого при установленном чекбоксе', async () => {
+    const user = userEvent.setup()
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await openModal(user)
+    await user.type(screen.getByLabelText('Название'), 'Йога')
+    fireEvent.change(screen.getByLabelText('Дата начала'), { target: { value: '2026-09-10' } })
+
+    const pastCheckbox = screen.getByRole('checkbox', { name: 'Отметить прошлое выполненным' })
+    expect(pastCheckbox).not.toBeChecked()
+    await user.click(pastCheckbox)
+    await user.click(screen.getByRole('button', { name: 'Создать' }))
+
+    await waitFor(() =>
+      expect(trackerApi.create).toHaveBeenCalledWith('token', {
+        name: 'Йога',
+        startDate: '2026-09-10',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+        markPastCompleted: true,
+      }),
+    )
   })
 
   it('закрывает модальное окно без создания', async () => {
@@ -320,11 +364,139 @@ describe('HabitsTab', () => {
     expect(screen.getByLabelText('Название')).toHaveValue('Медитация')
   })
 
-  it('не предоставляет действий изменения и удаления привычки', async () => {
+  it('открывает переименование с текущим названием', async () => {
+    const user = userEvent.setup()
     render(<HabitsTab />)
-
     await screen.findByText('Зарядка')
-    expect(screen.queryByRole('button', { name: /Изменить/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Удалить/ })).not.toBeInTheDocument()
+
+    await openRename(user, 'Зарядка')
+
+    expect(screen.getByLabelText('Название')).toHaveValue('Зарядка')
+  })
+
+  it('переименовывает привычку и обновляет название в списке', async () => {
+    const user = userEvent.setup()
+    trackerApi.update.mockResolvedValue({ id: 1, name: 'Утренняя зарядка' })
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await openRename(user, 'Зарядка')
+    await user.clear(screen.getByLabelText('Название'))
+    await user.type(screen.getByLabelText('Название'), 'Утренняя зарядка')
+    await user.click(screen.getByRole('button', { name: 'Переименовать' }))
+
+    await waitFor(() =>
+      expect(trackerApi.update).toHaveBeenCalledWith('token', 1, {
+        name: 'Утренняя зарядка',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+      }),
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByText('Утренняя зарядка')).toBeInTheDocument()
+    expect(screen.queryByText('Зарядка')).not.toBeInTheDocument()
+  })
+
+  it('передаёт неизменное расписание при переименовании', async () => {
+    const user = userEvent.setup()
+    trackerApi.listOnDate.mockResolvedValue([
+      {
+        id: 3,
+        name: 'Бассейн',
+        startDate: '2026-08-01',
+        frequency: 'SPECIFIC_WEEKDAYS',
+        weekdays: ['MONDAY', 'WEDNESDAY'],
+        date: TODAY,
+        completed: false,
+        type: 'HABIT',
+      },
+    ])
+    trackerApi.update.mockResolvedValue({ id: 3, name: 'Плавание' })
+    render(<HabitsTab />)
+    await screen.findByText('Бассейн')
+
+    await openRename(user, 'Бассейн')
+    await user.clear(screen.getByLabelText('Название'))
+    await user.type(screen.getByLabelText('Название'), 'Плавание')
+    await user.click(screen.getByRole('button', { name: 'Переименовать' }))
+
+    await waitFor(() =>
+      expect(trackerApi.update).toHaveBeenCalledWith('token', 3, {
+        name: 'Плавание',
+        startDate: '2026-08-01',
+        frequency: 'SPECIFIC_WEEKDAYS',
+        weekdays: ['MONDAY', 'WEDNESDAY'],
+        type: 'HABIT',
+      }),
+    )
+  })
+
+  it('отклоняет переименование без названия', async () => {
+    const user = userEvent.setup()
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await openRename(user, 'Зарядка')
+    await user.clear(screen.getByLabelText('Название'))
+    await user.click(screen.getByRole('button', { name: 'Переименовать' }))
+
+    expect(await screen.findByText('Укажите название привычки')).toBeInTheDocument()
+    expect(trackerApi.update).not.toHaveBeenCalled()
+  })
+
+  it('сохраняет прежнее название при ошибке переименования', async () => {
+    const user = userEvent.setup()
+    trackerApi.update.mockRejectedValue(new ApiError('Habit name must not be blank', 400))
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await openRename(user, 'Зарядка')
+    await user.clear(screen.getByLabelText('Название'))
+    await user.type(screen.getByLabelText('Название'), 'Новое')
+    await user.click(screen.getByRole('button', { name: 'Переименовать' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Habit name must not be blank')
+    expect(screen.getByText('Зарядка')).toBeInTheDocument()
+  })
+
+  it('удаляет привычку после подтверждения', async () => {
+    const user = userEvent.setup()
+    trackerApi.remove.mockResolvedValue(null)
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await user.click(screen.getByRole('button', { name: 'Удалить Зарядка' }))
+    await user.click(screen.getByRole('button', { name: 'Удалить' }))
+
+    await waitFor(() => expect(trackerApi.remove).toHaveBeenCalledWith('token', 1))
+    await waitFor(() => expect(screen.queryByText('Зарядка')).not.toBeInTheDocument())
+    expect(screen.getByText('Чтение')).toBeInTheDocument()
+  })
+
+  it('отмена удаления сохраняет привычку', async () => {
+    const user = userEvent.setup()
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await user.click(screen.getByRole('button', { name: 'Удалить Зарядка' }))
+    await user.click(screen.getByRole('button', { name: 'Отмена' }))
+
+    expect(trackerApi.remove).not.toHaveBeenCalled()
+    expect(screen.getByText('Зарядка')).toBeInTheDocument()
+  })
+
+  it('сохраняет привычку при ошибке удаления', async () => {
+    const user = userEvent.setup()
+    trackerApi.remove.mockRejectedValue(new ApiError('Habit not found', 404))
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await user.click(screen.getByRole('button', { name: 'Удалить Зарядка' }))
+    await user.click(screen.getByRole('button', { name: 'Удалить' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Habit not found')
+    expect(screen.getByText('Зарядка')).toBeInTheDocument()
   })
 })

@@ -34,6 +34,10 @@ public class Habit {
     @Column(name = "name", nullable = false, length = 200)
     private String name;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false, length = 16)
+    private ActivityType type;
+
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
@@ -56,9 +60,10 @@ public class Habit {
     protected Habit() {
     }
 
-    public Habit(Long userId, String name, LocalDate startDate, HabitFrequency frequency, Set<DayOfWeek> weekdays,
-            Instant now) {
+    public Habit(Long userId, ActivityType type, String name, LocalDate startDate, HabitFrequency frequency,
+            Set<DayOfWeek> weekdays, Instant now) {
         this.userId = userId;
+        this.type = type;
         this.createdAt = now;
         apply(name, startDate, frequency, weekdays, now);
     }
@@ -100,6 +105,10 @@ public class Habit {
 
     public String getName() {
         return name;
+    }
+
+    public ActivityType getType() {
+        return type;
     }
 
     public LocalDate getStartDate() {

@@ -37,9 +37,14 @@ public class HabitService {
     @Transactional
     public HabitResponse create(Long userId, HabitRequest request) {
         validateDefinition(request);
-        Habit habit = new Habit(userId, request.name().trim(), request.startDate(), request.frequency(),
-                requestedWeekdays(request), Instant.now(clock));
-        return toResponse(habitRepository.save(habit));
+        Instant now = Instant.now(clock);
+        Habit habit = new Habit(userId, request.type(), request.name().trim(), request.startDate(), request.frequency(),
+                requestedWeekdays(request), now);
+        Habit saved = habitRepository.save(habit);
+        if (Boolean.TRUE.equals(request.markPastCompleted())) {
+            markPastCompletions(saved, now);
+        }
+        return toResponse(saved);
     }
 
     @Transactional
@@ -51,12 +56,17 @@ public class HabitService {
         return toResponse(habitRepository.save(habit));
     }
 
+    @Transactional
+    public void delete(Long userId, Long habitId) {
+        Habit habit = requireHabit(userId, habitId);
+        habitRepository.delete(habit);
+    }
+
     @Transactional(readOnly = true)
-    public List<HabitOnDateResponse> listOnDate(Long userId, LocalDate date) {
+    public List<HabitOnDateResponse> listOnDate(Long userId, LocalDate date, ActivityType type) {
         LocalDate target = date != null ? date : today();
-        requireNotBeforeEarliestHabit(userId, target);
         List<Habit> habits = habitRepository.findScheduledOn(userId, target, target.getDayOfWeek(),
-                HabitFrequency.DAILY);
+                HabitFrequency.DAILY, type);
         Set<Long> completedHabitIds = completedHabitIds(habits, target, target);
         return habits.stream()
                 .map(habit -> toOnDateResponse(habit, target, completedHabitIds.contains(habit.getId())))
@@ -71,7 +81,6 @@ public class HabitService {
         if (from.isAfter(to)) {
             throw new InvalidHabitDataException("History range start must not be after range end");
         }
-        requireNotBeforeEarliestHabit(userId, from);
         List<Habit> habits = habitRepository.findStartedBy(userId, to);
         Map<Long, Set<LocalDate>> completedByHabit = completedDatesByHabit(habits, from, to);
         List<HabitHistoryResponse> result = new ArrayList<>();
@@ -82,7 +91,7 @@ public class HabitService {
                     .toList();
             if (!days.isEmpty()) {
                 result.add(new HabitHistoryResponse(habit.getId(), habit.getName(), habit.getStartDate(),
-                        habit.getFrequency(), sortedWeekdays(habit), days));
+                        habit.getFrequency(), sortedWeekdays(habit), days, habit.getType()));
             }
         }
         return result;
@@ -116,11 +125,14 @@ public class HabitService {
         if (request.startDate() == null) {
             throw new InvalidHabitDataException("Habit start date is required");
         }
-        if (request.startDate().isBefore(today())) {
-            throw new InvalidHabitDataException("Habit start date must not be in the past");
+        if (request.startDate().isAfter(today())) {
+            throw new InvalidHabitDataException("Habit start date must not be in the future");
         }
         if (request.frequency() == null) {
             throw new InvalidHabitDataException("Habit frequency is required");
+        }
+        if (request.type() == null) {
+            throw new InvalidHabitDataException("Activity type is required");
         }
         if (request.frequency() == HabitFrequency.SPECIFIC_WEEKDAYS && requestedWeekdays(request).isEmpty()) {
             throw new InvalidHabitDataException("At least one weekday is required for specific weekdays frequency");
@@ -147,13 +159,6 @@ public class HabitService {
                 .orElseThrow(() -> new HabitNotFoundException("Habit not found"));
     }
 
-    private void requireNotBeforeEarliestHabit(Long userId, LocalDate date) {
-        LocalDate earliest = habitRepository.findEarliestStartDate(userId).orElse(null);
-        if (earliest != null && date.isBefore(earliest)) {
-            throw new InvalidHabitDataException("Requested date is before the earliest habit start date");
-        }
-    }
-
     private Set<Long> completedHabitIds(List<Habit> habits, LocalDate from, LocalDate to) {
         if (habits.isEmpty()) {
             return Set.of();
@@ -172,6 +177,18 @@ public class HabitService {
         return completionRepository.findByHabitIdInAndCompletedOnBetween(habitIds, from, to).stream()
                 .collect(Collectors.groupingBy(HabitCompletion::getHabitId,
                         Collectors.mapping(HabitCompletion::getCompletedOn, Collectors.toSet())));
+    }
+
+    private void markPastCompletions(Habit habit, Instant now) {
+        LocalDate lastPastDate = today().minusDays(1);
+        List<LocalDate> pastScheduledDates = scheduledDates(habit, habit.getStartDate(), lastPastDate);
+        if (pastScheduledDates.isEmpty()) {
+            return;
+        }
+        List<HabitCompletion> completions = pastScheduledDates.stream()
+                .map(date -> new HabitCompletion(habit.getId(), date, now))
+                .toList();
+        completionRepository.saveAll(completions);
     }
 
     private List<LocalDate> scheduledDates(Habit habit, LocalDate from, LocalDate to) {
@@ -197,12 +214,12 @@ public class HabitService {
 
     private HabitResponse toResponse(Habit habit) {
         return new HabitResponse(habit.getId(), habit.getName(), habit.getStartDate(), habit.getFrequency(),
-                sortedWeekdays(habit));
+                sortedWeekdays(habit), habit.getType());
     }
 
     private HabitOnDateResponse toOnDateResponse(Habit habit, LocalDate date, boolean completed) {
         return new HabitOnDateResponse(habit.getId(), habit.getName(), habit.getStartDate(), habit.getFrequency(),
-                sortedWeekdays(habit), date, completed);
+                sortedWeekdays(habit), date, completed, habit.getType());
     }
 
     private List<DayOfWeek> sortedWeekdays(Habit habit) {

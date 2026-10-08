@@ -3,11 +3,18 @@ import { todayIso } from './dates'
 import { FREQUENCY, FREQUENCY_OPTIONS, WEEKDAY_OPTIONS } from './habitOptions'
 import { hasValidationErrors, validateHabitForm } from './validation'
 
-export default function HabitFormModal({ onClose, onSubmit }) {
+export default function HabitFormModal({
+  onClose,
+  onSubmit,
+  type,
+  title = 'Новая привычка',
+  entityLabel = 'привычки',
+}) {
   const [name, setName] = useState('')
   const [startDate, setStartDate] = useState(todayIso())
   const [frequency, setFrequency] = useState(FREQUENCY.DAILY)
   const [weekdays, setWeekdays] = useState([])
+  const [markPastCompleted, setMarkPastCompleted] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -36,7 +43,7 @@ export default function HabitFormModal({ onClose, onSubmit }) {
       return
     }
 
-    const errors = validateHabitForm({ name, startDate, frequency, weekdays })
+    const errors = validateHabitForm({ name, startDate, frequency, weekdays, entityLabel })
     setFieldErrors(errors)
     setFormError(null)
     if (hasValidationErrors(errors)) {
@@ -45,12 +52,17 @@ export default function HabitFormModal({ onClose, onSubmit }) {
 
     setIsSubmitting(true)
     try {
-      await onSubmit({
+      const values = {
         name: name.trim(),
         startDate,
         frequency,
         weekdays: frequency === FREQUENCY.SPECIFIC_WEEKDAYS ? weekdays : [],
-      })
+        type,
+      }
+      if (markPastCompleted) {
+        values.markPastCompleted = true
+      }
+      await onSubmit(values)
     } catch (error) {
       setFormError(error.message)
       setIsSubmitting(false)
@@ -67,7 +79,7 @@ export default function HabitFormModal({ onClose, onSubmit }) {
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="habit-modal-title" className="modal-title">
-          Новая привычка
+          {title}
         </h2>
 
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
@@ -97,7 +109,7 @@ export default function HabitFormModal({ onClose, onSubmit }) {
               name="startDate"
               type="date"
               value={startDate}
-              min={today}
+              max={today}
               disabled={isSubmitting}
               aria-invalid={Boolean(fieldErrors.startDate)}
               aria-describedby={fieldErrors.startDate ? 'habit-start-date-error' : undefined}
@@ -148,6 +160,20 @@ export default function HabitFormModal({ onClose, onSubmit }) {
               </div>
             </fieldset>
           )}
+
+          <div className="auth-field tracker-fieldset">
+            <label className="checkbox-option" htmlFor="habit-mark-past">
+              <input
+                id="habit-mark-past"
+                name="markPastCompleted"
+                type="checkbox"
+                checked={markPastCompleted}
+                disabled={isSubmitting}
+                onChange={(event) => setMarkPastCompleted(event.target.checked)}
+              />
+              <span>Отметить прошлое выполненным</span>
+            </label>
+          </div>
 
           {formError && (
             <p className="auth-form-error" role="alert">

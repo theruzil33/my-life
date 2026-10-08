@@ -27,6 +27,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.theruzil.tracker.habit.ActivityType;
 import com.theruzil.tracker.habit.Habit;
 import com.theruzil.tracker.habit.HabitFrequency;
 import com.theruzil.tracker.habit.HabitRepository;
@@ -68,29 +69,104 @@ class HabitControllerTest {
     void createsHabitForAuthenticatedUser() throws Exception {
         mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(habitBody("Morning run", TODAY, "DAILY")))
+                .content(habitBody("Morning run", TODAY, "DAILY", "HABIT")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isNumber())
                 .andExpect(jsonPath("$.name").value("Morning run"))
                 .andExpect(jsonPath("$.frequency").value("DAILY"))
+                .andExpect(jsonPath("$.type").value("HABIT"))
                 .andExpect(jsonPath("$.startDate").value(TODAY_VALUE))
                 .andExpect(jsonPath("$.weekdays").isEmpty());
+    }
+
+    @Test
+    void createsTaskForAuthenticatedUser() throws Exception {
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(habitBody("Read a book", TODAY, "DAILY", "TASK")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Read a book"))
+                .andExpect(jsonPath("$.type").value("TASK"));
+    }
+
+    @Test
+    void rejectsHabitWithoutType() throws Exception {
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"No type\",\"startDate\":\"" + TODAY + "\",\"frequency\":\"DAILY\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void rejectsHabitWithUnknownType() throws Exception {
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(habitBody("Unknown", TODAY, "DAILY", "CHORE")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
     @Test
     void rejectsHabitWithBlankName() throws Exception {
         mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(habitBody("   ", TODAY, "DAILY")))
+                .content(habitBody("   ", TODAY, "DAILY", "HABIT")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
     @Test
-    void rejectsHabitWithStartDateInThePast() throws Exception {
+    void acceptsHabitWithStartDateInThePast() throws Exception {
         mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(habitBody("Late", TODAY.minusDays(1), "DAILY")))
+                .content(habitBody("Backfilled", TODAY.minusDays(3), "DAILY", "HABIT")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.startDate").value(TODAY.minusDays(3).toString()));
+    }
+
+    @Test
+    void createsPastCompletionsWhenRequested() throws Exception {
+        LocalDate start = TODAY.minusDays(3);
+
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(habitBody("Backfilled", start, "DAILY", "HABIT", true)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.startDate").value(start.toString()));
+
+        mockMvc.perform(get("/habits/history").param("from", start.toString()).param("to", TODAY_VALUE)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].days.length()").value(4))
+                .andExpect(jsonPath("$[0].days[0].completed").value(true))
+                .andExpect(jsonPath("$[0].days[1].completed").value(true))
+                .andExpect(jsonPath("$[0].days[2].completed").value(true))
+                .andExpect(jsonPath("$[0].days[3].date").value(TODAY_VALUE))
+                .andExpect(jsonPath("$[0].days[3].completed").value(false));
+    }
+
+    @Test
+    void doesNotCreatePastCompletionsWithoutFlag() throws Exception {
+        LocalDate start = TODAY.minusDays(3);
+
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(habitBody("Plain", start, "DAILY", "HABIT")))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/habits/history").param("from", start.toString()).param("to", TODAY_VALUE)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].days[0].completed").value(false))
+                .andExpect(jsonPath("$[0].days[2].completed").value(false));
+    }
+
+    @Test
+    void rejectsHabitWithStartDateInTheFuture() throws Exception {
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(habitBody("Early", TODAY.plusDays(1), "DAILY", "HABIT")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").isNotEmpty());
     }
@@ -104,55 +180,147 @@ class HabitControllerTest {
 
     @Test
     void updatesHabit() throws Exception {
-        Habit habit = seedHabit(userId, "Old", TODAY, HabitFrequency.DAILY, Set.of());
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Old", TODAY, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(put("/habits/" + habit.getId()).header(UserIdFilter.USER_ID_HEADER, userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"New\",\"startDate\":\"2026-05-20\",\"frequency\":\"SPECIFIC_WEEKDAYS\","
-                        + "\"weekdays\":[\"MONDAY\",\"WEDNESDAY\"]}"))
+                .content("{\"name\":\"New\",\"startDate\":\"2026-05-10\",\"frequency\":\"SPECIFIC_WEEKDAYS\","
+                        + "\"weekdays\":[\"MONDAY\",\"WEDNESDAY\"],\"type\":\"TASK\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("New"))
-                .andExpect(jsonPath("$.startDate").value("2026-05-20"))
+                .andExpect(jsonPath("$.startDate").value("2026-05-10"))
                 .andExpect(jsonPath("$.frequency").value("SPECIFIC_WEEKDAYS"))
+                .andExpect(jsonPath("$.type").value("HABIT"))
                 .andExpect(jsonPath("$.weekdays[0]").value("MONDAY"))
                 .andExpect(jsonPath("$.weekdays[1]").value("WEDNESDAY"));
     }
 
     @Test
-    void rejectsUpdateWithPastStartDate() throws Exception {
-        Habit habit = seedHabit(userId, "Old", TODAY, HabitFrequency.DAILY, Set.of());
+    void rejectsUpdateWithFutureStartDate() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Old", TODAY, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(put("/habits/" + habit.getId()).header(UserIdFilter.USER_ID_HEADER, userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(habitBody("New", TODAY.minusDays(1), "DAILY")))
+                .content(habitBody("New", TODAY.plusDays(1), "DAILY", "HABIT")))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void rejectsUpdateOfForeignHabit() throws Exception {
-        Habit habit = seedHabit(userId + 1, "Other", TODAY, HabitFrequency.DAILY, Set.of());
+        Habit habit = seedHabit(userId + 1, ActivityType.HABIT, "Other", TODAY, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(put("/habits/" + habit.getId()).header(UserIdFilter.USER_ID_HEADER, userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(habitBody("New", TODAY, "DAILY")))
+                .content(habitBody("New", TODAY, "DAILY", "HABIT")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
+    void deletesOwnHabit() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "daily", TODAY.minusDays(3), HabitFrequency.DAILY,
+                Set.of());
+
+        mockMvc.perform(delete("/habits/" + habit.getId()).header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/habits").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void deletesOwnTask() throws Exception {
+        Habit task = seedHabit(userId, ActivityType.TASK, "task", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(delete("/habits/" + task.getId()).header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/habits").param("type", "TASK").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void deletingHabitRemovesItsCompletionsFromHistory() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "daily", TODAY.minusDays(3), HabitFrequency.DAILY,
+                Set.of());
+        mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/habits/" + habit.getId()).header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/habits/history").param("from", TODAY_VALUE).param("to", TODAY_VALUE)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void rejectsDeletionOfForeignHabit() throws Exception {
+        Habit habit = seedHabit(userId + 1, ActivityType.HABIT, "Other", TODAY, HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(delete("/habits/" + habit.getId()).header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/habits").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void rejectsDeletionOfMissingHabit() throws Exception {
+        mockMvc.perform(delete("/habits/999999").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rejectsDeletionWithoutUserIdHeader() throws Exception {
+        mockMvc.perform(delete("/habits/1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("authentication required"));
+    }
+
+    @Test
     void listsHabitsForTodayWithoutDateParameter() throws Exception {
-        seedHabit(userId, "daily", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+        seedHabit(userId, ActivityType.HABIT, "daily", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(get("/habits").header(UserIdFilter.USER_ID_HEADER, userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("daily"))
+                .andExpect(jsonPath("$[0].type").value("HABIT"))
                 .andExpect(jsonPath("$[0].date").value(TODAY_VALUE))
                 .andExpect(jsonPath("$[0].completed").value(false));
     }
 
     @Test
+    void listsOnlyRequestedType() throws Exception {
+        seedHabit(userId, ActivityType.HABIT, "habit", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+        seedHabit(userId, ActivityType.TASK, "task", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(get("/habits").param("type", "TASK").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("task"))
+                .andExpect(jsonPath("$[0].type").value("TASK"));
+    }
+
+    @Test
+    void listsBothTypesWhenTypeIsAbsent() throws Exception {
+        seedHabit(userId, ActivityType.HABIT, "habit", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+        seedHabit(userId, ActivityType.TASK, "task", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(get("/habits").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Test
     void listsPastDateWithCompletionStatus() throws Exception {
         LocalDate past = TODAY.minusDays(7);
-        Habit habit = seedHabit(userId, "daily", past.minusDays(5), HabitFrequency.DAILY, Set.of());
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "daily", past.minusDays(5), HabitFrequency.DAILY,
+                Set.of());
 
         mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + past)
                 .header(UserIdFilter.USER_ID_HEADER, userId))
@@ -167,18 +335,29 @@ class HabitControllerTest {
     }
 
     @Test
-    void rejectsListDateBeforeEarliestHabit() throws Exception {
-        seedHabit(userId, "daily", TODAY.minusDays(2), HabitFrequency.DAILY, Set.of());
+    void listsEmptyBeforeEarliestHabit() throws Exception {
+        seedHabit(userId, ActivityType.HABIT, "daily", TODAY.minusDays(2), HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(get("/habits").param("date", TODAY.minusDays(3).toString())
                 .header(UserIdFilter.USER_ID_HEADER, userId))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").isNotEmpty());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void historyRangeBelowEarliestHabitIsAllowed() throws Exception {
+        seedHabit(userId, ActivityType.HABIT, "daily", TODAY.minusDays(1), HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(get("/habits/history").param("from", TODAY.minusDays(10).toString())
+                .param("to", TODAY_VALUE).header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].days.length()").value(2))
+                .andExpect(jsonPath("$[0].days[0].date").value(TODAY.minusDays(1).toString()));
     }
 
     @Test
     void doesNotListHabitsOfOtherUsers() throws Exception {
-        seedHabit(userId + 1, "other", TODAY, HabitFrequency.DAILY, Set.of());
+        seedHabit(userId + 1, ActivityType.HABIT, "other", TODAY, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(get("/habits").header(UserIdFilter.USER_ID_HEADER, userId))
                 .andExpect(status().isOk())
@@ -188,15 +367,30 @@ class HabitControllerTest {
     @Test
     void returnsHistoryForRange() throws Exception {
         LocalDate from = TODAY.minusDays(2);
-        seedHabit(userId, "daily", from, HabitFrequency.DAILY, Set.of());
+        seedHabit(userId, ActivityType.HABIT, "daily", from, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(get("/habits/history").param("from", from.toString()).param("to", TODAY_VALUE)
                 .header(UserIdFilter.USER_ID_HEADER, userId))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].type").value("HABIT"))
                 .andExpect(jsonPath("$[0].days.length()").value(3))
                 .andExpect(jsonPath("$[0].days[0].date").value(from.toString()))
                 .andExpect(jsonPath("$[0].days[0].completed").value(false))
                 .andExpect(jsonPath("$[0].days[2].date").value(TODAY_VALUE));
+    }
+
+    @Test
+    void historyIncludesBothTypes() throws Exception {
+        LocalDate from = TODAY.minusDays(1);
+        seedHabit(userId, ActivityType.HABIT, "habit", from, HabitFrequency.DAILY, Set.of());
+        seedHabit(userId, ActivityType.TASK, "task", from, HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(get("/habits/history").param("from", from.toString()).param("to", TODAY_VALUE)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].type").value("HABIT"))
+                .andExpect(jsonPath("$[1].type").value("TASK"));
     }
 
     @Test
@@ -211,7 +405,7 @@ class HabitControllerTest {
     @Test
     void historyDoesNotIncludeHabitsOfOtherUsers() throws Exception {
         LocalDate from = TODAY.minusDays(1);
-        seedHabit(userId + 1, "other", from, HabitFrequency.DAILY, Set.of());
+        seedHabit(userId + 1, ActivityType.HABIT, "other", from, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(get("/habits/history").param("from", from.toString()).param("to", TODAY_VALUE)
                 .header(UserIdFilter.USER_ID_HEADER, userId))
@@ -221,7 +415,8 @@ class HabitControllerTest {
 
     @Test
     void marksAndUnmarksCompletion() throws Exception {
-        Habit habit = seedHabit(userId, "daily", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "daily", TODAY.minusDays(3), HabitFrequency.DAILY,
+                Set.of());
 
         mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
                 .header(UserIdFilter.USER_ID_HEADER, userId))
@@ -236,8 +431,19 @@ class HabitControllerTest {
     }
 
     @Test
+    void marksTaskCompletion() throws Exception {
+        Habit task = seedHabit(userId, ActivityType.TASK, "task", TODAY.minusDays(3), HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(put("/habits/" + task.getId() + "/completions/" + TODAY)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completed").value(true))
+                .andExpect(jsonPath("$.type").value("TASK"));
+    }
+
+    @Test
     void rejectsCompletionInTheFuture() throws Exception {
-        Habit habit = seedHabit(userId, "daily", TODAY, HabitFrequency.DAILY, Set.of());
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "daily", TODAY, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY.plusDays(1))
                 .header(UserIdFilter.USER_ID_HEADER, userId))
@@ -247,8 +453,8 @@ class HabitControllerTest {
 
     @Test
     void rejectsCompletionOnUnscheduledWeekday() throws Exception {
-        Habit habit = seedHabit(userId, "weekly", TODAY.minusDays(10), HabitFrequency.SPECIFIC_WEEKDAYS,
-                Set.of(TODAY.getDayOfWeek().plus(1)));
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "weekly", TODAY.minusDays(10),
+                HabitFrequency.SPECIFIC_WEEKDAYS, Set.of(TODAY.getDayOfWeek().plus(1)));
 
         mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
                 .header(UserIdFilter.USER_ID_HEADER, userId))
@@ -257,20 +463,27 @@ class HabitControllerTest {
 
     @Test
     void rejectsCompletionOfForeignHabit() throws Exception {
-        Habit habit = seedHabit(userId + 1, "other", TODAY, HabitFrequency.DAILY, Set.of());
+        Habit habit = seedHabit(userId + 1, ActivityType.HABIT, "other", TODAY, HabitFrequency.DAILY, Set.of());
 
         mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
                 .header(UserIdFilter.USER_ID_HEADER, userId))
                 .andExpect(status().isNotFound());
     }
 
-    private Habit seedHabit(Long ownerId, String name, LocalDate startDate, HabitFrequency frequency,
-            Set<DayOfWeek> weekdays) {
-        return habitRepository.saveAndFlush(new Habit(ownerId, name, startDate, frequency, weekdays, NOW));
+    private Habit seedHabit(Long ownerId, ActivityType type, String name, LocalDate startDate,
+            HabitFrequency frequency, Set<DayOfWeek> weekdays) {
+        return habitRepository.saveAndFlush(new Habit(ownerId, type, name, startDate, frequency, weekdays, NOW));
     }
 
-    private String habitBody(String name, LocalDate startDate, String frequency) {
-        return "{\"name\":\"" + name + "\",\"startDate\":\"" + startDate + "\",\"frequency\":\"" + frequency + "\"}";
+    private String habitBody(String name, LocalDate startDate, String frequency, String type) {
+        return "{\"name\":\"" + name + "\",\"startDate\":\"" + startDate + "\",\"frequency\":\"" + frequency
+                + "\",\"type\":\"" + type + "\"}";
+    }
+
+    private String habitBody(String name, LocalDate startDate, String frequency, String type,
+            boolean markPastCompleted) {
+        return "{\"name\":\"" + name + "\",\"startDate\":\"" + startDate + "\",\"frequency\":\"" + frequency
+                + "\",\"type\":\"" + type + "\",\"markPastCompleted\":" + markPastCompleted + "}";
     }
 
     private static Long randomUserId() {

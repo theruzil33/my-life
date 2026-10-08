@@ -10,12 +10,12 @@ beforeEach(() => {
 })
 
 describe('trackerApi', () => {
-  it('запрашивает список привычек на дату с токеном', async () => {
+  it('запрашивает список активностей на дату с типом и токеном', async () => {
     request.mockResolvedValue([])
 
-    const result = await trackerApi.listOnDate('token', '2026-09-17')
+    const result = await trackerApi.listOnDate('token', '2026-09-17', 'TASK')
 
-    expect(request).toHaveBeenCalledWith('/tracker/habits?date=2026-09-17', {
+    expect(request).toHaveBeenCalledWith('/tracker/habits?date=2026-09-17&type=TASK', {
       token: 'token',
       requiresAuth: true,
     })
@@ -41,11 +41,57 @@ describe('trackerApi', () => {
       startDate: '2026-09-17',
       frequency: 'DAILY',
       weekdays: [],
+      type: 'HABIT',
     })
 
     expect(request).toHaveBeenCalledWith('/tracker/habits', {
       method: 'POST',
-      body: { name: 'Зарядка', startDate: '2026-09-17', frequency: 'DAILY' },
+      body: { name: 'Зарядка', startDate: '2026-09-17', frequency: 'DAILY', type: 'HABIT' },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('передаёт признак отметки прошлого при создании', async () => {
+    request.mockResolvedValue({ id: 5 })
+
+    await trackerApi.create('token', {
+      name: 'Бег',
+      startDate: '2026-09-01',
+      frequency: 'DAILY',
+      weekdays: [],
+      type: 'HABIT',
+      markPastCompleted: true,
+    })
+
+    expect(request).toHaveBeenCalledWith('/tracker/habits', {
+      method: 'POST',
+      body: {
+        name: 'Бег',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        type: 'HABIT',
+        markPastCompleted: true,
+      },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('не включает признак отметки прошлого, если он не задан', async () => {
+    request.mockResolvedValue({ id: 6 })
+
+    await trackerApi.create('token', {
+      name: 'Бег',
+      startDate: '2026-09-01',
+      frequency: 'DAILY',
+      weekdays: [],
+      type: 'HABIT',
+    })
+
+    expect(request).toHaveBeenCalledWith('/tracker/habits', {
+      method: 'POST',
+      body: { name: 'Бег', startDate: '2026-09-01', frequency: 'DAILY', type: 'HABIT' },
       token: 'token',
       requiresAuth: true,
     })
@@ -59,6 +105,7 @@ describe('trackerApi', () => {
       startDate: '2026-09-17',
       frequency: 'SPECIFIC_WEEKDAYS',
       weekdays: ['MONDAY', 'WEDNESDAY'],
+      type: 'TASK',
     })
 
     expect(request).toHaveBeenCalledWith('/tracker/habits', {
@@ -68,7 +115,64 @@ describe('trackerApi', () => {
         startDate: '2026-09-17',
         frequency: 'SPECIFIC_WEEKDAYS',
         weekdays: ['MONDAY', 'WEDNESDAY'],
+        type: 'TASK',
       },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('переименовывает активность через PUT с полным определением', async () => {
+    request.mockResolvedValue({ id: 3 })
+
+    await trackerApi.update('token', 3, {
+      name: 'Новое имя',
+      startDate: '2026-09-01',
+      frequency: 'SPECIFIC_WEEKDAYS',
+      weekdays: ['MONDAY'],
+      type: 'HABIT',
+    })
+
+    expect(request).toHaveBeenCalledWith('/tracker/habits/3', {
+      method: 'PUT',
+      body: {
+        name: 'Новое имя',
+        startDate: '2026-09-01',
+        frequency: 'SPECIFIC_WEEKDAYS',
+        weekdays: ['MONDAY'],
+        type: 'HABIT',
+      },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('переименовывает ежедневную активность без дней недели', async () => {
+    request.mockResolvedValue({ id: 4 })
+
+    await trackerApi.update('token', 4, {
+      name: 'Новое имя',
+      startDate: '2026-09-01',
+      frequency: 'DAILY',
+      weekdays: [],
+      type: 'TASK',
+    })
+
+    expect(request).toHaveBeenCalledWith('/tracker/habits/4', {
+      method: 'PUT',
+      body: { name: 'Новое имя', startDate: '2026-09-01', frequency: 'DAILY', type: 'TASK' },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('удаляет активность через DELETE', async () => {
+    request.mockResolvedValue(null)
+
+    await trackerApi.remove('token', 7)
+
+    expect(request).toHaveBeenCalledWith('/tracker/habits/7', {
+      method: 'DELETE',
       token: 'token',
       requiresAuth: true,
     })
