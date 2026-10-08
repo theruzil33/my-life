@@ -1,0 +1,86 @@
+# Запуск приложений (gateway, tracker, web) без PostgreSQL.
+# Используется, когда база уже запущена отдельно, а поднимать её этим
+# compose-файлом не нужно.
+#
+# Быстрый запуск (Postgres на хосте):
+#   docker compose -f docker-compose.no-postgres.yml up -d --build
+#
+# Postgres в другом контейнере (например, сервис postgres из docker-compose.yml):
+#   1) узнайте сеть:                 docker network ls
+#   2) подключите файл к той сети:   см. блок networks ниже
+#   POSTGRES_HOST=postgres docker compose -f docker-compose.no-postgres.yml up -d --build
+#
+# Переменные БД берутся из .env (см. .env.example):
+#   POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+# Дополнительно можно задать:
+#   POSTGRES_HOST — хост БД (по умолчанию host.docker.internal, т.е. хост-машина)
+#   POSTGRES_PORT — порт БД (по умолчанию 5432)
+#
+# Остановка:
+#   docker compose -f docker-compose.no-postgres.yml down
+
+services:
+  gateway:
+    build:
+      context: ./backend/gateway
+    environment:
+      GATEWAY_DB_URL: jdbc:postgresql://${POSTGRES_HOST:-host.docker.internal}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-my_life}
+      GATEWAY_DB_USERNAME: ${POSTGRES_USER:-postgres}
+      GATEWAY_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      GATEWAY_JWT_SECRET: ${GATEWAY_JWT_SECRET:?set GATEWAY_JWT_SECRET in .env}
+      GATEWAY_JWT_ACCESS_TOKEN_TTL: ${GATEWAY_JWT_ACCESS_TOKEN_TTL:-PT15M}
+      GATEWAY_AUTH_REFRESH_TOKEN_TTL: ${GATEWAY_AUTH_REFRESH_TOKEN_TTL:-P7D}
+      GATEWAY_AUTH_COOKIE_SECURE: ${GATEWAY_AUTH_COOKIE_SECURE:-false}
+      GATEWAY_AUTH_COOKIE_SAME_SITE: ${GATEWAY_AUTH_COOKIE_SAME_SITE:-Lax}
+      GATEWAY_TRACKER_BASE_URL: http://tracker:8081
+    # Доступ к Postgres, запущенному на хост-машине, из контейнера.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/auth/csrf"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  tracker:
+    build:
+      context: ./backend/tracker
+    depends_on:
+      # Tracker выполняет Flyway baseline поверх схемы, созданной gateway,
+      # поэтому должен стартовать после успешных миграций gateway.
+      gateway:
+        condition: service_healthy
+    environment:
+      TRACKER_DB_URL: jdbc:postgresql://${POSTGRES_HOST:-host.docker.internal}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-my_life}
+      TRACKER_DB_USERNAME: ${POSTGRES_USER:-postgres}
+      TRACKER_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      TRACKER_TIME_ZONE: ${TRACKER_TIME_ZONE:-Europe/Moscow}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8081"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./client/web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    depends_on:
+      - gateway
+    ports:
+      - "${WEB_PORT:-80}:80"
+    restart: unless-stopped
+
+# Чтобы подключиться к Postgres, запущенному в другой compose-сети, уберите
+# комментарии ниже и подставьте имя внешней сети (см. `docker network ls`),
+# затем запускайте с POSTGRES_HOST=<имя_сервиса_postgres>.
+#
+# networks:
+#   default:
+#     external: true
+#     name: my-life_default

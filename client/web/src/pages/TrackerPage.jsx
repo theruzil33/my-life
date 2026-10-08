@@ -1,20 +1,30 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import HabitsTab from '../tracker/HabitsTab'
+import TasksTab from '../tracker/TasksTab'
 import StatisticsTab from '../tracker/StatisticsTab'
 
 const HABITS_TAB = 'habits'
+const TASKS_TAB = 'tasks'
 const STATISTICS_TAB = 'statistics'
+
+const TAB_LABELS = {
+  [HABITS_TAB]: 'Привычки',
+  [TASKS_TAB]: 'Задачи',
+  [STATISTICS_TAB]: 'Статистика',
+}
 
 export default function TrackerPage() {
   const [activeTab, setActiveTab] = useState(HABITS_TAB)
-  const [statisticsOpened, setStatisticsOpened] = useState(false)
+  const [openedTabs, setOpenedTabs] = useState({
+    [HABITS_TAB]: true,
+    [TASKS_TAB]: false,
+    [STATISTICS_TAB]: false,
+  })
 
   function selectTab(tab) {
     setActiveTab(tab)
-    if (tab === STATISTICS_TAB) {
-      setStatisticsOpened(true)
-    }
+    setOpenedTabs((tabs) => (tabs[tab] ? tabs : { ...tabs, [tab]: true }))
   }
 
   return (
@@ -27,31 +37,31 @@ export default function TrackerPage() {
       </div>
 
       <div className="tracker-tabs" role="tablist" aria-label="Разделы трекера">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === HABITS_TAB}
-          className={activeTab === HABITS_TAB ? 'tracker-tab tracker-tab-active' : 'tracker-tab'}
-          onClick={() => selectTab(HABITS_TAB)}
-        >
-          Привычки
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === STATISTICS_TAB}
-          className={activeTab === STATISTICS_TAB ? 'tracker-tab tracker-tab-active' : 'tracker-tab'}
-          onClick={() => selectTab(STATISTICS_TAB)}
-        >
-          Статистика
-        </button>
+        {[HABITS_TAB, TASKS_TAB, STATISTICS_TAB].map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
+            className={activeTab === tab ? 'tracker-tab tracker-tab-active' : 'tracker-tab'}
+            onClick={() => selectTab(tab)}
+          >
+            {TAB_LABELS[tab]}
+          </button>
+        ))}
       </div>
 
       <div role="tabpanel" aria-label="Привычки" hidden={activeTab !== HABITS_TAB}>
         <HabitsTab />
       </div>
 
-      {statisticsOpened && (
+      {openedTabs[TASKS_TAB] && (
+        <div role="tabpanel" aria-label="Задачи" hidden={activeTab !== TASKS_TAB}>
+          <TasksTab />
+        </div>
+      )}
+
+      {openedTabs[STATISTICS_TAB] && (
         <div role="tabpanel" aria-label="Статистика" hidden={activeTab !== STATISTICS_TAB}>
           <StatisticsTab />
         </div>

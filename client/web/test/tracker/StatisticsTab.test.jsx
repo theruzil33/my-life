@@ -37,9 +37,22 @@ const historyRecords = [
     startDate: '2026-09-01',
     frequency: 'DAILY',
     weekdays: [],
+    type: 'HABIT',
     days: [
       { date: '2026-09-02', completed: true },
       { date: '2026-09-03', completed: false },
+    ],
+  },
+  {
+    id: 2,
+    name: 'Чтение книги',
+    startDate: '2026-09-01',
+    frequency: 'DAILY',
+    weekdays: [],
+    type: 'TASK',
+    days: [
+      { date: '2026-09-02', completed: false },
+      { date: '2026-09-03', completed: true },
     ],
   },
 ]
@@ -109,6 +122,16 @@ describe('StatisticsTab', () => {
     )
     expect(screen.getByRole('rowheader', { name: 'Зарядка' })).toBeInTheDocument()
     expect(screen.getByRole('table')).toBeInTheDocument()
+  })
+
+  it('разделяет привычки и задачи по группам в одной матрице', async () => {
+    render(<StatisticsTab />)
+
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Привычки' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Задачи' })).toBeInTheDocument()
+    expect(screen.getByRole('rowheader', { name: 'Зарядка' })).toBeInTheDocument()
+    expect(screen.getByRole('rowheader', { name: 'Чтение книги' })).toBeInTheDocument()
   })
 
   it('применяет выбранный диапазон', async () => {

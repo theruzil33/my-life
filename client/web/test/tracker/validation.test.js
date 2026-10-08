@@ -34,14 +34,14 @@ describe('validateHabitForm', () => {
     expect(validateHabitForm(form({ name: '   ' })).name).toBe('Укажите название привычки')
   })
 
-  it('отклоняет дату начала в прошлом', () => {
-    const errors = validateHabitForm(form({ startDate: addDays(today, -1) }))
-    expect(errors.startDate).toBe('Дата начала не может быть раньше сегодняшней')
+  it('отклоняет дату начала в будущем', () => {
+    const errors = validateHabitForm(form({ startDate: addDays(today, 1) }))
+    expect(errors.startDate).toBe('Дата начала не может быть позже сегодняшней')
   })
 
-  it('принимает сегодняшнюю и будущую дату начала', () => {
+  it('принимает сегодняшнюю и прошлую дату начала', () => {
     expect(validateHabitForm(form({ startDate: today })).startDate).toBeUndefined()
-    expect(validateHabitForm(form({ startDate: addDays(today, 3) })).startDate).toBeUndefined()
+    expect(validateHabitForm(form({ startDate: addDays(today, -3) })).startDate).toBeUndefined()
   })
 
   it('требует дату начала', () => {

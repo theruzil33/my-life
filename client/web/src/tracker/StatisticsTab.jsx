@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { trackerApi } from '../api/trackerApi'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -102,6 +102,16 @@ export default function StatisticsTab() {
 
   const columns = eachIsoDate(applied.from, applied.to)
 
+  const groups = [
+    { type: 'HABIT', label: 'Привычки' },
+    { type: 'TASK', label: 'Задачи' },
+  ]
+    .map((group) => ({
+      ...group,
+      records: (records ?? []).filter((record) => (record.type ?? 'HABIT') === group.type),
+    }))
+    .filter((group) => group.records.length > 0)
+
   return (
     <div className="stats-tab">
       <form className="stats-controls" onSubmit={handleApply} noValidate>
@@ -172,7 +182,7 @@ export default function StatisticsTab() {
               <thead>
                 <tr>
                   <th scope="col" className="stats-habit-name">
-                    Привычка
+                    Активность
                   </th>
                   {columns.map((date) => (
                     <th key={date} scope="col" className="stats-day-label" title={date}>
@@ -182,36 +192,45 @@ export default function StatisticsTab() {
                 </tr>
               </thead>
               <tbody>
-                {records.map((record) => {
-                  const scheduled = new Set(record.days.map((day) => day.date))
-                  const completed = new Set(
-                    record.days.filter((day) => day.completed).map((day) => day.date),
-                  )
-                  return (
-                    <tr key={record.id}>
-                      <th scope="row" className="stats-habit-name">
-                        {record.name}
+                {groups.map((group) => (
+                  <Fragment key={group.type}>
+                    <tr className="stats-group-row">
+                      <th scope="colgroup" colSpan={columns.length + 1}>
+                        {group.label}
                       </th>
-                      {columns.map((date) => {
-                        const status = completed.has(date)
-                          ? 'completed'
-                          : scheduled.has(date)
-                            ? 'scheduled'
-                            : 'unscheduled'
-                        return (
-                          <td key={date} className="stats-cell">
-                            <span
-                              className={`stats-square stats-square-${status}`}
-                              title={`${date}: ${STATUS_LABELS[status]}`}
-                              aria-label={`${record.name}, ${date}: ${STATUS_LABELS[status]}`}
-                              role="img"
-                            />
-                          </td>
-                        )
-                      })}
                     </tr>
-                  )
-                })}
+                    {group.records.map((record) => {
+                      const scheduled = new Set(record.days.map((day) => day.date))
+                      const completed = new Set(
+                        record.days.filter((day) => day.completed).map((day) => day.date),
+                      )
+                      return (
+                        <tr key={record.id}>
+                          <th scope="row" className="stats-habit-name">
+                            {record.name}
+                          </th>
+                          {columns.map((date) => {
+                            const status = completed.has(date)
+                              ? 'completed'
+                              : scheduled.has(date)
+                                ? 'scheduled'
+                                : 'unscheduled'
+                            return (
+                              <td key={date} className="stats-cell">
+                                <span
+                                  className={`stats-square stats-square-${status}`}
+                                  title={`${date}: ${STATUS_LABELS[status]}`}
+                                  aria-label={`${record.name}, ${date}: ${STATUS_LABELS[status]}`}
+                                  role="img"
+                                />
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </Fragment>
+                ))}
               </tbody>
             </table>
           </div>

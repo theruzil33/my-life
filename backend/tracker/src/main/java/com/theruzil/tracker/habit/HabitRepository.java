@@ -20,11 +20,13 @@ public interface HabitRepository extends JpaRepository<Habit, Long> {
             select h from Habit h
             where h.userId = :userId
               and h.startDate <= :date
+              and (:type is null or h.type = :type)
               and (h.frequency = :daily or :dayOfWeek member of h.weekdays)
             order by h.id
             """)
     List<Habit> findScheduledOn(@Param("userId") Long userId, @Param("date") LocalDate date,
-            @Param("dayOfWeek") DayOfWeek dayOfWeek, @Param("daily") HabitFrequency daily);
+            @Param("dayOfWeek") DayOfWeek dayOfWeek, @Param("daily") HabitFrequency daily,
+            @Param("type") ActivityType type);
 
     @Query("""
             select h from Habit h

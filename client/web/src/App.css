@@ -248,6 +248,22 @@
   color: var(--text-h);
 }
 
+.habit-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.habit-action {
+  font: inherit;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
 .tracker-fieldset {
   border: none;
   margin: 0;
@@ -353,6 +369,14 @@
   color: var(--text-h);
   text-align: left;
   white-space: nowrap;
+}
+
+.stats-group-row th {
+  padding: 8px 0 4px !important;
+  color: var(--text-h);
+  font-size: 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
 }
 
 .stats-day-label {
