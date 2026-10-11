@@ -22,6 +22,7 @@ vi.mock('../../src/api/financeApi', () => ({
     listOperationsByRange: vi.fn(),
     saveOperation: vi.fn(),
     removeOperation: vi.fn(),
+    importFile: vi.fn(),
   },
 }))
 
@@ -70,6 +71,7 @@ beforeEach(() => {
   financeApi.listOperationsByRange.mockResolvedValue([])
   financeApi.saveOperation.mockResolvedValue({ id: 1 })
   financeApi.removeOperation.mockResolvedValue(null)
+  financeApi.importFile.mockResolvedValue({ createdCategories: 1, savedOperations: 2 })
 })
 
 describe('FinancesPage', () => {
@@ -528,5 +530,104 @@ describe('FinancesPage', () => {
     expect(rows[0]).toHaveTextContent('Продукты')
     expect(rows[1]).toHaveTextContent('Премия')
     expect(rows[2]).toHaveTextContent('Зарплата')
+  })
+
+  it('показывает кнопку импорта рядом с изменением начального баланса и открывает модальное окно', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    const header = document.querySelector('.balance-header')
+    const buttons = header.querySelectorAll('button')
+    expect(buttons[0]).toHaveTextContent('Изменить начальный баланс')
+    expect(buttons[1]).toHaveTextContent('Импорт')
+
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByLabelText('Месяц и год')).toHaveAttribute('type', 'month')
+    expect(within(dialog).getByLabelText('Файл CSV')).toHaveAttribute('type', 'file')
+  })
+
+  it('импортирует файл, показывает сводку и перечитывает данные', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    expect(financeApi.getBalance).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(within(dialog).getByLabelText('Файл CSV'), new File(['csv'], 'Деньги.csv', { type: 'text/csv' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(financeApi.importFile).toHaveBeenCalledWith('token', {
+      year: expect.any(Number),
+      month: expect.any(Number),
+      file: expect.any(File),
+    })
+    expect(await within(dialog).findByText('Создано категорий: 1. Записано операций: 2.')).toBeInTheDocument()
+    await waitFor(() => expect(financeApi.getBalance).toHaveBeenCalledTimes(2))
+  })
+
+  it('не отправляет импорт без выбранного файла', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Выберите файл для импорта')
+    expect(financeApi.importFile).not.toHaveBeenCalled()
+  })
+
+  it('показывает ошибку импорта', async () => {
+    financeApi.importFile.mockRejectedValue(new Error('Файл не содержит статей'))
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(within(dialog).getByLabelText('Файл CSV'), new File(['csv'], 'Деньги.csv', { type: 'text/csv' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Файл не содержит статей')
+    expect(within(dialog).queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('блокирует повторный импорт во время запроса', async () => {
+    const pending = deferred()
+    financeApi.importFile.mockReturnValue(pending.promise)
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(within(dialog).getByLabelText('Файл CSV'), new File(['csv'], 'Деньги.csv', { type: 'text/csv' }))
+    const submit = within(dialog).getByRole('button', { name: 'Импортировать' })
+    await user.click(submit)
+
+    expect(financeApi.importFile).toHaveBeenCalledTimes(1)
+    expect(submit).toBeDisabled()
+
+    pending.resolve({ createdCategories: 0, savedOperations: 0 })
+    await waitFor(() => expect(submit).not.toBeDisabled())
+  })
+
+  it('закрывает модальное окно импорта без отправки', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(financeApi.importFile).not.toHaveBeenCalled()
   })
 })

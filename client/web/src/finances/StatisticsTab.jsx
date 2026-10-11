@@ -39,7 +39,7 @@ function hasPlan(plannedAmount) {
   return plannedAmount !== null && plannedAmount !== undefined
 }
 
-export default function StatisticsTab({ isActive = true }) {
+export default function StatisticsTab({ isActive = true, refreshToken = 0 }) {
   const { accessToken } = useAuth()
   const initialMonth = currentMonthIso()
   const [applied, setApplied] = useState(initialMonth)
@@ -85,8 +85,8 @@ export default function StatisticsTab({ isActive = true }) {
     return () => {
       cancelled = true
     }
-    // перечитывание при открытии вкладки (isActive) и при смене месяца (applied)
-  }, [accessToken, isActive, applied])
+    // перечитывание при открытии вкладки (isActive), смене месяца (applied) и после импорта (refreshToken)
+  }, [accessToken, isActive, applied, refreshToken])
 
   function handleApply(event) {
     event.preventDefault()

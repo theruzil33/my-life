@@ -256,4 +256,14 @@ describe('StatisticsTab', () => {
     expect(await screen.findByText('Кафе')).toBeInTheDocument()
     await waitFor(() => expect(financeApi.listOperationsByRange).toHaveBeenCalledTimes(2))
   })
+
+  it('перечитывает данные при изменении refreshToken', async () => {
+    const { rerender } = render(<StatisticsTab refreshToken={0} />)
+    await screen.findByText('Продукты')
+    expect(financeApi.listOperationsByRange).toHaveBeenCalledTimes(1)
+
+    rerender(<StatisticsTab refreshToken={1} />)
+
+    await waitFor(() => expect(financeApi.listOperationsByRange).toHaveBeenCalledTimes(2))
+  })
 })

@@ -131,8 +131,9 @@ export async function request(
   }
 
   const isMutating = !SAFE_METHODS.has(method.toUpperCase())
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
   const headers = { Accept: 'application/json' }
-  if (body !== undefined) {
+  if (body !== undefined && !isFormData) {
     headers['Content-Type'] = 'application/json'
   }
   if (token) {
@@ -151,7 +152,7 @@ export async function request(
       method,
       headers,
       credentials: 'include',
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
     })
   } catch {
     throw new ApiError(NETWORK_ERROR_MESSAGE, 0)
