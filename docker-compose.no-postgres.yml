@@ -1,4 +1,4 @@
-# Запуск приложений (gateway, tracker, web) без PostgreSQL.
+# Запуск приложений (gateway, tracker, finance, web) без PostgreSQL.
 # Используется, когда база уже запущена отдельно, а поднимать её этим
 # compose-файлом не нужно.
 #
@@ -33,6 +33,7 @@ services:
       GATEWAY_AUTH_COOKIE_SECURE: ${GATEWAY_AUTH_COOKIE_SECURE:-false}
       GATEWAY_AUTH_COOKIE_SAME_SITE: ${GATEWAY_AUTH_COOKIE_SAME_SITE:-Lax}
       GATEWAY_TRACKER_BASE_URL: http://tracker:8081
+      GATEWAY_FINANCE_BASE_URL: http://finance:8082
     # Доступ к Postgres, запущенному на хост-машине, из контейнера.
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -63,6 +64,24 @@ services:
       - "host.docker.internal:host-gateway"
     expose:
       - "8081"
+    restart: unless-stopped
+
+  finance:
+    build:
+      context: ./backend/finance
+    depends_on:
+      # Finance, как и tracker, выполняет Flyway baseline поверх схемы,
+      # созданной gateway, поэтому должен стартовать после успешных миграций gateway.
+      gateway:
+        condition: service_healthy
+    environment:
+      FINANCE_DB_URL: jdbc:postgresql://${POSTGRES_HOST:-host.docker.internal}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-my_life}
+      FINANCE_DB_USERNAME: ${POSTGRES_USER:-postgres}
+      FINANCE_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8082"
     restart: unless-stopped
 
   web:

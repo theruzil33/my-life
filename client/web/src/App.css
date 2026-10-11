@@ -427,3 +427,241 @@
   gap: 6px;
 }
 
+.finances-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.balance-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  width: 100%;
+}
+
+.balance-label {
+  color: var(--text);
+}
+
+.balance-amount {
+  color: var(--text-h);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-edit {
+  font: inherit;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.categories-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.category-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-group-framed {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.category-group-title {
+  margin: 0;
+  color: var(--text-h);
+  font-size: 1rem;
+  text-align: left;
+}
+
+.category-group-start {
+  margin-top: 16px;
+}
+
+.categories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 640px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.category-name {
+  color: var(--text-h);
+}
+
+.category-item-income .category-name {
+  color: #2e7d32;
+}
+
+.category-item-expense .category-name {
+  color: #d14343;
+}
+
+.category-type {
+  color: var(--text);
+  font-size: 0.9em;
+}
+
+.operations-date {
+  width: 100%;
+  max-width: 640px;
+}
+
+.operations-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.operations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 640px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operation-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.operation-name {
+  color: var(--text-h);
+}
+
+.operation-row-income .operation-name {
+  color: #2e7d32;
+}
+
+.operation-row-expense .operation-name {
+  color: #d14343;
+}
+
+.operation-amount {
+  margin-left: auto;
+  width: 140px;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-stats-matrix {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.finances-tab .stats-scroll {
+  max-height: none;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  scrollbar-gutter: stable;
+}
+
+.finance-stats-matrix th,
+.finance-stats-matrix td {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+}
+
+.finance-stats-matrix .stats-day-label {
+  min-width: 44px;
+}
+
+.finance-stats-matrix .finance-stats-cell {
+  width: auto;
+  min-width: 56px;
+  height: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.finance-stats-group {
+  vertical-align: middle;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--text-h);
+  font-size: 0.9em;
+}
+
+.finance-stats-matrix tbody th {
+  font-weight: 400;
+}
+
+.finance-stats-matrix tr.operation-row-income th.stats-habit-name {
+  color: #2e7d32;
+}
+
+.finance-stats-matrix tr.operation-row-expense th.stats-habit-name {
+  color: #d14343;
+}
+
+.stats-totals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 12px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.stats-total-income {
+  color: #2e7d32;
+}
+
+.stats-total-expense {
+  color: #d14343;
+}
+
+
