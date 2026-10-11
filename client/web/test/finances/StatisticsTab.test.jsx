@@ -31,7 +31,7 @@ beforeEach(() => {
 })
 
 describe('StatisticsTab', () => {
-  it('строит таблицу категорий и дат с суммами в порядке «расход → приход»', async () => {
+  it('строит таблицу категорий и дней месяца с суммами в порядке «расход → приход»', async () => {
     render(<StatisticsTab />)
 
     expect(await screen.findByText('Продукты')).toBeInTheDocument()
@@ -44,7 +44,33 @@ describe('StatisticsTab', () => {
     expect(rows[1]).toHaveTextContent('Зарплата')
   })
 
-  it('показывает итоги прихода и ухода за выбранный период между выбором диапазона и таблицей', async () => {
+  it('сохраняет порядок строк одного типа из ответа API, а не по идентификатору', async () => {
+    financeApi.listCategories.mockResolvedValue([
+      { id: 30, type: 'EXPENSE', name: 'Первая', group: null },
+      { id: 10, type: 'EXPENSE', name: 'Вторая', group: null },
+    ])
+    financeApi.listOperationsByRange.mockResolvedValue([])
+
+    render(<StatisticsTab />)
+
+    await screen.findByText('Первая')
+    const rows = document.querySelectorAll('.finance-stats-matrix tbody tr')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('Первая')
+    expect(rows[1]).toHaveTextContent('Вторая')
+  })
+
+  it('показывает выбор месяца вместо произвольного диапазона', async () => {
+    render(<StatisticsTab />)
+
+    await screen.findByText('Продукты')
+
+    expect(screen.getByLabelText('Месяц и год')).toHaveAttribute('type', 'month')
+    expect(screen.queryByLabelText('С')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('По')).not.toBeInTheDocument()
+  })
+
+  it('показывает итоги прихода и ухода за выбранный месяц между выбором месяца и таблицей', async () => {
     financeApi.listCategories.mockResolvedValue([
       { id: 11, type: 'INCOME', name: 'Зарплата', group: null },
       { id: 12, type: 'EXPENSE', name: 'Продукты', group: null },
@@ -67,7 +93,7 @@ describe('StatisticsTab', () => {
     expect(totals.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('показывает нулевые итоги, когда за период нет операций', async () => {
+  it('показывает нулевые итоги, когда за месяц нет операций', async () => {
     financeApi.listOperationsByRange.mockResolvedValue([])
 
     render(<StatisticsTab />)
@@ -76,23 +102,23 @@ describe('StatisticsTab', () => {
     expect(screen.getByText('Расход: 0.00')).toBeInTheDocument()
   })
 
-  it('обновляет итоги при смене диапазона', async () => {
+  it('обновляет итоги при смене месяца', async () => {
     financeApi.listOperationsByRange.mockResolvedValueOnce([
       { id: 101, categoryId: 12, date: todayIso(), amount: 40.5 },
     ])
     financeApi.listOperationsByRange.mockResolvedValueOnce([
-      { id: 101, categoryId: 12, date: todayIso(), amount: 99 },
+      { id: 101, categoryId: 12, date: '2026-09-15', amount: 99 },
     ])
 
     render(<StatisticsTab />)
     expect(await screen.findByText('Расход: 40.50')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('С'), { target: { value: '2026-09-01' } })
-    fireEvent.change(screen.getByLabelText('По'), { target: { value: '2026-09-30' } })
+    fireEvent.change(screen.getByLabelText('Месяц и год'), { target: { value: '2026-09' } })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Применить' }))
 
     expect(await screen.findByText('Расход: 99.00')).toBeInTheDocument()
+    expect(financeApi.listOperationsByRange).toHaveBeenLastCalledWith('token', '2026-09-01', '2026-09-30')
   })
 
   it('показывает пустое состояние при отсутствии категорий', async () => {
@@ -103,17 +129,16 @@ describe('StatisticsTab', () => {
     expect(await screen.findByText('У вас пока нет категорий.')).toBeInTheDocument()
   })
 
-  it('не отправляет запрос при недопустимом диапазоне', async () => {
+  it('не отправляет запрос при пустом месяце', async () => {
     render(<StatisticsTab />)
     await screen.findByText('Продукты')
     expect(financeApi.listOperationsByRange).toHaveBeenCalledTimes(1)
 
-    fireEvent.change(screen.getByLabelText('С'), { target: { value: '2026-10-31' } })
-    fireEvent.change(screen.getByLabelText('По'), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByLabelText('Месяц и год'), { target: { value: '' } })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Применить' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Начало диапазона не может быть позже конца')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Выберите месяц и год')
     expect(financeApi.listOperationsByRange).toHaveBeenCalledTimes(1)
   })
 
@@ -167,6 +192,48 @@ describe('StatisticsTab', () => {
     const nameCells = transportRow.querySelectorAll('th')
     expect(nameCells).toHaveLength(1)
     expect(nameCells[0]).toHaveAttribute('colspan', '2')
+  })
+
+  it('показывает колонки «План» и «Дельта» и рассчитывает дельту как план минус факт', async () => {
+    financeApi.listCategories.mockResolvedValue([
+      { id: 11, type: 'INCOME', name: 'Зарплата', group: null, plannedAmount: 1000 },
+      { id: 12, type: 'EXPENSE', name: 'Продукты', group: null, plannedAmount: 200 },
+      { id: 13, type: 'EXPENSE', name: 'Кафе', group: null, plannedAmount: null },
+    ])
+    financeApi.listOperationsByRange.mockResolvedValue([
+      { id: 101, categoryId: 11, date: todayIso(), amount: 400 },
+      { id: 102, categoryId: 12, date: todayIso(), amount: 250 },
+    ])
+
+    render(<StatisticsTab />)
+    await screen.findByText('Продукты')
+
+    expect(screen.getByRole('columnheader', { name: 'План' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Дельта' })).toBeInTheDocument()
+
+    const rows = Array.from(document.querySelectorAll('.finance-stats-matrix tbody tr'))
+    const rowFor = (name) => rows.find((row) => row.textContent.includes(name))
+
+    expect(rowFor('Зарплата').querySelector('.finance-stats-plan')).toHaveTextContent('1000.00')
+    expect(rowFor('Зарплата').querySelector('.finance-stats-delta')).toHaveTextContent('600.00')
+    expect(rowFor('Продукты').querySelector('.finance-stats-plan')).toHaveTextContent('200.00')
+    expect(rowFor('Продукты').querySelector('.finance-stats-delta')).toHaveTextContent('-50.00')
+
+    expect(rowFor('Кафе').querySelector('.finance-stats-plan').textContent).toBe('')
+    expect(rowFor('Кафе').querySelector('.finance-stats-delta').textContent).toBe('')
+  })
+
+  it('показывает дельту, равную плану, когда за месяц нет операций', async () => {
+    financeApi.listCategories.mockResolvedValue([
+      { id: 12, type: 'EXPENSE', name: 'Продукты', group: null, plannedAmount: 300 },
+    ])
+    financeApi.listOperationsByRange.mockResolvedValue([])
+
+    render(<StatisticsTab />)
+    await screen.findByText('Продукты')
+
+    const row = document.querySelector('.finance-stats-matrix tbody tr')
+    expect(row.querySelector('.finance-stats-delta')).toHaveTextContent('300.00')
   })
 
   it('перечитывает данные при повторном открытии вкладки', async () => {

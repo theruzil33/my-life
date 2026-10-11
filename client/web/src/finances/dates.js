@@ -15,6 +15,22 @@ export function todayIso() {
   return toIsoDate(new Date())
 }
 
+export function currentMonthIso(reference = new Date()) {
+  return `${reference.getFullYear()}-${pad(reference.getMonth() + 1)}`
+}
+
+export function monthRange(monthValue) {
+  if (!monthValue) {
+    return { from: '', to: '' }
+  }
+  const [year, month] = monthValue.split('-').map(Number)
+  if (!year || !month) {
+    return { from: '', to: '' }
+  }
+  const reference = new Date(year, month - 1, 1)
+  return { from: firstDayOfMonthIso(reference), to: lastDayOfMonthIso(reference) }
+}
+
 export function firstDayOfMonthIso(reference = new Date()) {
   return toIsoDate(new Date(reference.getFullYear(), reference.getMonth(), 1))
 }

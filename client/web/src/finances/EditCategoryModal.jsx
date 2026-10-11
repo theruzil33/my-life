@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { CATEGORY_TYPE_LABELS } from './categoryOptions'
+import { initialPlannedAmount, parsePlannedAmount } from './plannedAmount'
 
 const ERROR_REQUIRED_NAME = 'Укажите название категории'
 
 export default function EditCategoryModal({ category, groupNamesByType = {}, onClose, onSubmit }) {
   const [name, setName] = useState(category.name)
   const [group, setGroup] = useState(category.group ?? '')
+  const [plannedAmount, setPlannedAmount] = useState(initialPlannedAmount(category.plannedAmount))
+  const [planError, setPlanError] = useState(null)
   const [fieldError, setFieldError] = useState(null)
   const [formError, setFormError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -26,17 +29,20 @@ export default function EditCategoryModal({ category, groupNamesByType = {}, onC
       return
     }
 
-    if (name.trim() === '') {
-      setFieldError(ERROR_REQUIRED_NAME)
+    const plan = parsePlannedAmount(plannedAmount)
+    if (name.trim() === '' || plan.error) {
+      setFieldError(name.trim() === '' ? ERROR_REQUIRED_NAME : null)
+      setPlanError(plan.error ?? null)
       setFormError(null)
       return
     }
 
     setFieldError(null)
+    setPlanError(null)
     setFormError(null)
     setIsSubmitting(true)
     try {
-      await onSubmit({ name: name.trim(), group: group.trim() })
+      await onSubmit({ name: name.trim(), group: group.trim(), plannedAmount: plan.value })
     } catch (error) {
       setFormError(error.message)
       setIsSubmitting(false)
@@ -97,6 +103,26 @@ export default function EditCategoryModal({ category, groupNamesByType = {}, onC
                 <option key={option} value={option} />
               ))}
             </datalist>
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="edit-category-planned">Плановая сумма в месяц</label>
+            <input
+              id="edit-category-planned"
+              name="plannedAmount"
+              type="text"
+              inputMode="decimal"
+              value={plannedAmount}
+              disabled={isSubmitting}
+              aria-invalid={Boolean(planError)}
+              aria-describedby={planError ? 'edit-category-planned-error' : undefined}
+              onChange={(event) => setPlannedAmount(event.target.value)}
+            />
+            {planError && (
+              <p id="edit-category-planned-error" className="auth-field-error">
+                {planError}
+              </p>
+            )}
           </div>
 
           {formError && (

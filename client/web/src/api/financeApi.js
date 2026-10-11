@@ -21,7 +21,12 @@ export const financeApi = {
   createCategory(token, category) {
     return request('/finances/categories', {
       method: 'POST',
-      body: { type: category.type, name: category.name, group: category.group ? category.group : null },
+      body: {
+        type: category.type,
+        name: category.name,
+        group: category.group ? category.group : null,
+        plannedAmount: category.plannedAmount ?? null,
+      },
       token,
       requiresAuth: true,
     })
@@ -30,7 +35,11 @@ export const financeApi = {
   updateCategory(token, id, category) {
     return request(`/finances/categories/${id}`, {
       method: 'PUT',
-      body: { name: category.name, group: category.group ? category.group : null },
+      body: {
+        name: category.name,
+        group: category.group ? category.group : null,
+        plannedAmount: category.plannedAmount ?? null,
+      },
       token,
       requiresAuth: true,
     })
@@ -39,6 +48,15 @@ export const financeApi = {
   removeCategory(token, id) {
     return request(`/finances/categories/${id}`, {
       method: 'DELETE',
+      token,
+      requiresAuth: true,
+    })
+  },
+
+  reorderCategories(token, type, categoryIds) {
+    return request('/finances/categories/order', {
+      method: 'PUT',
+      body: { type, categoryIds },
       token,
       requiresAuth: true,
     })

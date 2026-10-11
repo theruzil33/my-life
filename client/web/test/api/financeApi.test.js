@@ -47,40 +47,58 @@ describe('financeApi', () => {
     expect(result).toEqual([])
   })
 
-  it('создаёт категорию с типом, названием и группой', async () => {
+  it('создаёт категорию с типом, названием, группой и планом', async () => {
     request.mockResolvedValue({ id: 1 })
 
-    await financeApi.createCategory('token', { type: 'INCOME', name: 'Зарплата', group: 'Работа' })
+    await financeApi.createCategory('token', {
+      type: 'INCOME',
+      name: 'Зарплата',
+      group: 'Работа',
+      plannedAmount: 500.5,
+    })
 
     expect(request).toHaveBeenCalledWith('/finances/categories', {
       method: 'POST',
-      body: { type: 'INCOME', name: 'Зарплата', group: 'Работа' },
+      body: { type: 'INCOME', name: 'Зарплата', group: 'Работа', plannedAmount: 500.5 },
       token: 'token',
       requiresAuth: true,
     })
   })
 
-  it('создаёт категорию без группы', async () => {
+  it('создаёт категорию без группы и без плана', async () => {
     request.mockResolvedValue({ id: 1 })
 
     await financeApi.createCategory('token', { type: 'INCOME', name: 'Зарплата' })
 
     expect(request).toHaveBeenCalledWith('/finances/categories', {
       method: 'POST',
-      body: { type: 'INCOME', name: 'Зарплата', group: null },
+      body: { type: 'INCOME', name: 'Зарплата', group: null, plannedAmount: null },
       token: 'token',
       requiresAuth: true,
     })
   })
 
-  it('редактирует категорию через PUT с названием и группой', async () => {
+  it('редактирует категорию через PUT с названием, группой и планом', async () => {
     request.mockResolvedValue({ id: 1 })
 
-    await financeApi.updateCategory('token', 7, { name: 'Премия', group: 'Бонусы' })
+    await financeApi.updateCategory('token', 7, { name: 'Премия', group: 'Бонусы', plannedAmount: 300 })
 
     expect(request).toHaveBeenCalledWith('/finances/categories/7', {
       method: 'PUT',
-      body: { name: 'Премия', group: 'Бонусы' },
+      body: { name: 'Премия', group: 'Бонусы', plannedAmount: 300 },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('редактирует категорию без плана, отправляя null', async () => {
+    request.mockResolvedValue({ id: 1 })
+
+    await financeApi.updateCategory('token', 7, { name: 'Премия', group: null })
+
+    expect(request).toHaveBeenCalledWith('/finances/categories/7', {
+      method: 'PUT',
+      body: { name: 'Премия', group: null, plannedAmount: null },
       token: 'token',
       requiresAuth: true,
     })
@@ -93,6 +111,19 @@ describe('financeApi', () => {
 
     expect(request).toHaveBeenCalledWith('/finances/categories/7', {
       method: 'DELETE',
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('меняет порядок категорий типа через PUT', async () => {
+    request.mockResolvedValue(null)
+
+    await financeApi.reorderCategories('token', 'INCOME', [3, 1, 2])
+
+    expect(request).toHaveBeenCalledWith('/finances/categories/order', {
+      method: 'PUT',
+      body: { type: 'INCOME', categoryIds: [3, 1, 2] },
       token: 'token',
       requiresAuth: true,
     })
