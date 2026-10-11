@@ -10,7 +10,23 @@ vi.mock('../src/api/authApi', () => ({
   authApi: { login: vi.fn(), register: vi.fn(), refresh: vi.fn(), logout: vi.fn() },
 }))
 
+vi.mock('../src/api/financeApi', () => ({
+  financeApi: {
+    getBalance: vi.fn(),
+    updateBalance: vi.fn(),
+    listCategories: vi.fn(),
+    createCategory: vi.fn(),
+    updateCategory: vi.fn(),
+    removeCategory: vi.fn(),
+    listOperationsByDate: vi.fn(),
+    listOperationsByRange: vi.fn(),
+    saveOperation: vi.fn(),
+    removeOperation: vi.fn(),
+  },
+}))
+
 import { authApi } from '../src/api/authApi'
+import { financeApi } from '../src/api/financeApi'
 
 function renderApp(initialEntries) {
   return render(
@@ -26,6 +42,9 @@ beforeEach(() => {
   vi.resetAllMocks()
   authApi.refresh.mockRejectedValue(new ApiError('no session', 401))
   authApi.logout.mockResolvedValue(null)
+  financeApi.getBalance.mockResolvedValue({ startingBalance: 0, amount: 0 })
+  financeApi.listCategories.mockResolvedValue([])
+  financeApi.listOperationsByDate.mockResolvedValue([])
 })
 
 describe('App', () => {
@@ -65,5 +84,20 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Вход' })).toBeInTheDocument()
     expect(authApi.logout).toHaveBeenCalledTimes(1)
     expect(window.localStorage.getItem('my-life.auth')).toBeNull()
+  })
+
+  it('открывает страницу финансов для аутентифицированного пользователя', async () => {
+    authApi.refresh.mockResolvedValue({ accessToken: 'jwt-token', email: 'user@example.com' })
+
+    renderApp(['/finances'])
+
+    expect(await screen.findByRole('heading', { name: 'Финансы' })).toBeInTheDocument()
+  })
+
+  it('перенаправляет неаутентифицированного пользователя с финансов на вход', async () => {
+    renderApp(['/finances'])
+
+    expect(await screen.findByRole('heading', { name: 'Вход' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Финансы' })).not.toBeInTheDocument()
   })
 })

@@ -84,6 +84,8 @@ class ProxyRoutingTest {
         registry.add("gateway.routes[0].target-base-url", () -> STUB_BASE_URL);
         registry.add("gateway.routes[1].prefix", () -> "/unavailable");
         registry.add("gateway.routes[1].target-base-url", () -> "http://127.0.0.1:1");
+        registry.add("gateway.routes[2].prefix", () -> "/finances");
+        registry.add("gateway.routes[2].target-base-url", () -> STUB_BASE_URL);
     }
 
     @AfterAll
@@ -125,6 +127,17 @@ class ProxyRoutingTest {
 
         assertThat(body(response)).contains("\"userId\":\"42\"");
         assertThat(body(response)).contains("\"authorization\":\"null\"");
+    }
+
+    @Test
+    void routesFinancesPrefixToConfiguredService() {
+        String token = jwtService.issueAccessToken(42L);
+
+        ResponseEntity<byte[]> response = call(HttpMethod.GET, "/finances/accounts", token, null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(body(response)).contains("\"path\":\"/finances/accounts\"");
+        assertThat(body(response)).contains("\"userId\":\"42\"");
     }
 
     @Test

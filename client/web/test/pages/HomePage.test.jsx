@@ -18,6 +18,7 @@ function renderHub(initialEntries = ['/']) {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/tracker" element={<p>Страница трекера</p>} />
+          <Route path="/finances" element={<p>Страница финансов</p>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -38,14 +39,15 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument()
   })
 
-  it('показывает карточку трекера и неактивные карточки-заглушки', async () => {
+  it('показывает активные карточки трекера и финансов и неактивную заглушку', async () => {
     renderHub()
 
     expect(await screen.findByRole('link', { name: /Трекер/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Финансы/ })).toBeInTheDocument()
 
-    const placeholder = screen.getByText('Финансы').closest('[aria-disabled="true"]')
+    const placeholder = screen.getByText('Заметки').closest('[aria-disabled="true"]')
     expect(placeholder).not.toBeNull()
-    expect(screen.queryByRole('link', { name: /Финансы/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Заметки/ })).toBeNull()
   })
 
   it('открывает трекер по клику на карточку', async () => {
@@ -57,11 +59,20 @@ describe('HomePage', () => {
     expect(await screen.findByText('Страница трекера')).toBeInTheDocument()
   })
 
+  it('открывает финансы по клику на карточку', async () => {
+    const user = userEvent.setup()
+    renderHub()
+
+    await user.click(await screen.findByRole('link', { name: /Финансы/ }))
+
+    expect(await screen.findByText('Страница финансов')).toBeInTheDocument()
+  })
+
   it('не выполняет переход по карточке-заглушке', async () => {
     const user = userEvent.setup()
     renderHub()
 
-    await user.click(await screen.findByText('Финансы'))
+    await user.click(await screen.findByText('Заметки'))
 
     expect(screen.queryByText('Страница трекера')).not.toBeInTheDocument()
     expect(screen.getByText('Мои приложения')).toBeInTheDocument()

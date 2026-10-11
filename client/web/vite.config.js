@@ -22,6 +22,18 @@ export default defineConfig({
           return undefined
         },
       },
+      '/finances': {
+        target: process.env.GATEWAY_URL ?? 'http://localhost:8080',
+        changeOrigin: true,
+        // Навигация браузера на SPA-маршрут /finances не должна уходить в API,
+        // иначе пользователь не дойдёт до клиентского редиректа на вход.
+        bypass(req) {
+          if ((req.headers.accept ?? '').includes('text/html')) {
+            return req.url
+          }
+          return undefined
+        },
+      },
     },
   },
   test: {

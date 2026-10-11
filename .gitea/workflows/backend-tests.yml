@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [gateway, tracker]
+        service: [gateway, tracker, finance]
     defaults:
       run:
         working-directory: backend/${{ matrix.service }}

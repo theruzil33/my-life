@@ -9,8 +9,9 @@ export const APPS = [
   {
     id: 'finances',
     title: 'Финансы',
-    description: 'Скоро',
-    enabled: false,
+    description: 'Счета и деньги',
+    path: '/finances',
+    enabled: true,
   },
   {
     id: 'notes',
