@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { CATEGORY_TYPE_LABELS, CATEGORY_TYPE_ORDER } from './categoryOptions'
+import { parsePlannedAmount } from './plannedAmount'
 
 const ERROR_REQUIRED_TYPE = 'Выберите тип категории'
 const ERROR_REQUIRED_NAME = 'Укажите название категории'
 
-function validateCategoryForm({ type, name }) {
+function validateCategoryForm({ type, name, plannedAmount }) {
   const errors = {}
   if (type === '') {
     errors.type = ERROR_REQUIRED_TYPE
@@ -12,13 +13,18 @@ function validateCategoryForm({ type, name }) {
   if (name.trim() === '') {
     errors.name = ERROR_REQUIRED_NAME
   }
-  return errors
+  const plan = parsePlannedAmount(plannedAmount)
+  if (plan.error) {
+    errors.plannedAmount = plan.error
+  }
+  return { errors, plannedAmount: plan.value }
 }
 
 export default function CategoryFormModal({ onClose, onSubmit, groupNamesByType = {} }) {
   const [type, setType] = useState('')
   const [name, setName] = useState('')
   const [group, setGroup] = useState('')
+  const [plannedAmount, setPlannedAmount] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -39,16 +45,21 @@ export default function CategoryFormModal({ onClose, onSubmit, groupNamesByType 
       return
     }
 
-    const errors = validateCategoryForm({ type, name })
-    setFieldErrors(errors)
+    const validation = validateCategoryForm({ type, name, plannedAmount })
+    setFieldErrors(validation.errors)
     setFormError(null)
-    if (Object.keys(errors).length > 0) {
+    if (Object.keys(validation.errors).length > 0) {
       return
     }
 
     setIsSubmitting(true)
     try {
-      await onSubmit({ type, name: name.trim(), group: group.trim() })
+      await onSubmit({
+        type,
+        name: name.trim(),
+        group: group.trim(),
+        plannedAmount: validation.plannedAmount,
+      })
     } catch (error) {
       setFormError(error.message)
       setIsSubmitting(false)
@@ -129,6 +140,26 @@ export default function CategoryFormModal({ onClose, onSubmit, groupNamesByType 
                 <option key={option} value={option} />
               ))}
             </datalist>
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="category-planned">Плановая сумма в месяц</label>
+            <input
+              id="category-planned"
+              name="plannedAmount"
+              type="text"
+              inputMode="decimal"
+              value={plannedAmount}
+              disabled={isSubmitting}
+              aria-invalid={Boolean(fieldErrors.plannedAmount)}
+              aria-describedby={fieldErrors.plannedAmount ? 'category-planned-error' : undefined}
+              onChange={(event) => setPlannedAmount(event.target.value)}
+            />
+            {fieldErrors.plannedAmount && (
+              <p id="category-planned-error" className="auth-field-error">
+                {fieldErrors.plannedAmount}
+              </p>
+            )}
           </div>
 
           {formError && (

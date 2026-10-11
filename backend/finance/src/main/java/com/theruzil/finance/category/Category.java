@@ -1,5 +1,6 @@
 package com.theruzil.finance.category;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 import jakarta.persistence.Column;
@@ -32,6 +33,12 @@ public class Category {
     @Column(name = "group_name", length = 200)
     private String groupName;
 
+    @Column(name = "planned_amount")
+    private BigDecimal plannedAmount;
+
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -42,18 +49,36 @@ public class Category {
     }
 
     public Category(Long userId, CategoryType type, String name, String groupName, Instant now) {
+        this(userId, type, name, groupName, null, now);
+    }
+
+    public Category(Long userId, CategoryType type, String name, String groupName, BigDecimal plannedAmount,
+            Instant now) {
+        this(userId, type, name, groupName, plannedAmount, 0, now);
+    }
+
+    public Category(Long userId, CategoryType type, String name, String groupName, BigDecimal plannedAmount,
+            Integer sortOrder, Instant now) {
         this.userId = userId;
         this.type = type;
         this.name = name;
         this.groupName = groupName;
+        this.plannedAmount = plannedAmount;
+        this.sortOrder = sortOrder;
         this.createdAt = now;
         this.updatedAt = now;
     }
 
-    public void edit(String name, String groupName, Instant now) {
+    public void edit(String name, String groupName, BigDecimal plannedAmount, Instant now) {
         this.name = name;
         this.groupName = groupName;
+        this.plannedAmount = plannedAmount;
         this.updatedAt = now;
+    }
+
+    public void assignSortOrder(Integer sortOrder) {
+        this.sortOrder = sortOrder;
+        this.updatedAt = Instant.now();
     }
 
     public Long getId() {
@@ -74,6 +99,14 @@ public class Category {
 
     public String getGroupName() {
         return groupName;
+    }
+
+    public BigDecimal getPlannedAmount() {
+        return plannedAmount;
+    }
+
+    public Integer getSortOrder() {
+        return sortOrder;
     }
 
     public Instant getCreatedAt() {

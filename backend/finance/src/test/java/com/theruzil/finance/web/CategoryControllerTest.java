@@ -76,6 +76,69 @@ class CategoryControllerTest {
     }
 
     @Test
+    void createsCategoryWithPlannedAmount() throws Exception {
+        mockMvc.perform(post("/categories").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"EXPENSE\",\"name\":\"Продукты\",\"plannedAmount\":15000.00}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.plannedAmount")
+                        .value(org.hamcrest.Matchers.closeTo(15000.00, 0.001)));
+
+        mockMvc.perform(get("/categories").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].plannedAmount")
+                        .value(org.hamcrest.Matchers.closeTo(15000.00, 0.001)));
+    }
+
+    @Test
+    void createsCategoryWithoutPlannedAmount() throws Exception {
+        mockMvc.perform(post("/categories").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"EXPENSE\",\"name\":\"Продукты\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.plannedAmount").doesNotExist());
+    }
+
+    @Test
+    void rejectsNonPositivePlannedAmount() throws Exception {
+        mockMvc.perform(post("/categories").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"EXPENSE\",\"name\":\"Продукты\",\"plannedAmount\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+
+        mockMvc.perform(post("/categories").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"EXPENSE\",\"name\":\"Продукты\",\"plannedAmount\":-10.00}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void editsPlannedAmount() throws Exception {
+        Category category = categoryRepository.save(new Category(userId, CategoryType.EXPENSE, "Продукты", null, NOW));
+
+        mockMvc.perform(put("/categories/" + category.getId()).header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Продукты\",\"plannedAmount\":250.50}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plannedAmount")
+                        .value(org.hamcrest.Matchers.closeTo(250.50, 0.001)));
+    }
+
+    @Test
+    void editsCategoryClearingPlannedAmount() throws Exception {
+        Category category = categoryRepository.save(
+                new Category(userId, CategoryType.EXPENSE, "Продукты", null, new java.math.BigDecimal("250.50"), NOW));
+
+        mockMvc.perform(put("/categories/" + category.getId()).header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Продукты\",\"plannedAmount\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plannedAmount").doesNotExist());
+    }
+
+    @Test
     void listsIncomeBeforeExpense() throws Exception {
         categoryRepository.save(new Category(userId, CategoryType.EXPENSE, "Продукты", null, NOW));
         categoryRepository.save(new Category(userId, CategoryType.INCOME, "Зарплата", "Работа", NOW));
@@ -85,6 +148,60 @@ class CategoryControllerTest {
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].type").value("INCOME"))
                 .andExpect(jsonPath("$[1].type").value("EXPENSE"));
+    }
+
+    @Test
+    void reordersCategoriesOfTypeAndReflectsInList() throws Exception {
+        Category first = categoryRepository.save(
+                new Category(userId, CategoryType.INCOME, "A", null, null, 1, NOW));
+        Category second = categoryRepository.save(
+                new Category(userId, CategoryType.INCOME, "B", null, null, 2, NOW));
+
+        mockMvc.perform(put("/categories/order").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"INCOME\",\"categoryIds\":[" + second.getId() + "," + first.getId() + "]}"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/categories").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(second.getId()))
+                .andExpect(jsonPath("$[1].id").value(first.getId()));
+    }
+
+    @Test
+    void rejectsReorderingWithForeignCategory() throws Exception {
+        Category foreign = categoryRepository.save(
+                new Category(randomUserId(), CategoryType.INCOME, "Чужая", null, null, 1, NOW));
+
+        mockMvc.perform(put("/categories/order").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"INCOME\",\"categoryIds\":[" + foreign.getId() + "]}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void rejectsReorderingWithWrongTypeDuplicateOrIncompleteSet() throws Exception {
+        Category income = categoryRepository.save(
+                new Category(userId, CategoryType.INCOME, "A", null, null, 1, NOW));
+        categoryRepository.save(new Category(userId, CategoryType.INCOME, "B", null, null, 2, NOW));
+        Category expense = categoryRepository.save(
+                new Category(userId, CategoryType.EXPENSE, "Продукты", null, null, 1, NOW));
+
+        mockMvc.perform(put("/categories/order").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"INCOME\",\"categoryIds\":[" + expense.getId() + "]}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(put("/categories/order").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"INCOME\",\"categoryIds\":[" + income.getId() + "," + income.getId() + "]}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(put("/categories/order").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"INCOME\",\"categoryIds\":[" + income.getId() + "]}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

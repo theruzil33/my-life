@@ -1,4 +1,6 @@
 package com.theruzil.finance.category.dto;
 
-public record CategoryRequest(String type, String name, String group) {
+import java.math.BigDecimal;
+
+public record CategoryRequest(String type, String name, String group, BigDecimal plannedAmount) {
 }

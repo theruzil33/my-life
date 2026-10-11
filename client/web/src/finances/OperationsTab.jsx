@@ -6,10 +6,9 @@ import { todayIso } from './dates'
 const TYPE_ORDER = { EXPENSE: 0, INCOME: 1 }
 
 function orderCategories(categories) {
-  return [...categories].sort((first, second) => {
-    const byType = (TYPE_ORDER[first.type] ?? 2) - (TYPE_ORDER[second.type] ?? 2)
-    return byType !== 0 ? byType : first.id - second.id
-  })
+  return [...categories].sort(
+    (first, second) => (TYPE_ORDER[first.type] ?? 2) - (TYPE_ORDER[second.type] ?? 2),
+  )
 }
 
 function buildBlocks(categories) {

@@ -2,7 +2,7 @@ function formatAmount(value) {
   return Number(value).toFixed(2)
 }
 
-export default function BalanceHeader({ balance, isLoading, error, onEdit }) {
+export default function BalanceHeader({ balance, isLoading, error, onEdit, onImport }) {
   return (
     <div className="balance-header">
       <span className="balance-label">Баланс</span>
@@ -17,6 +17,9 @@ export default function BalanceHeader({ balance, isLoading, error, onEdit }) {
       )}
       <button type="button" className="balance-edit" onClick={onEdit}>
         Изменить начальный баланс
+      </button>
+      <button type="button" className="balance-edit balance-import" onClick={onImport}>
+        Импорт
       </button>
     </div>
   )

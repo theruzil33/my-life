@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.theruzil.finance.category.CategoryService;
+import com.theruzil.finance.category.dto.CategoryOrderRequest;
 import com.theruzil.finance.category.dto.CategoryRequest;
 import com.theruzil.finance.category.dto.CategoryResponse;
 
@@ -44,6 +45,13 @@ public class CategoryController {
     public CategoryResponse edit(@RequestAttribute(UserIdFilter.USER_ID_ATTRIBUTE) Long userId, @PathVariable Long id,
             @RequestBody CategoryRequest request) {
         return categoryService.edit(userId, id, request);
+    }
+
+    @PutMapping("/order")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reorder(@RequestAttribute(UserIdFilter.USER_ID_ATTRIBUTE) Long userId,
+            @RequestBody CategoryOrderRequest request) {
+        categoryService.reorder(userId, request);
     }
 
     @DeleteMapping("/{id}")

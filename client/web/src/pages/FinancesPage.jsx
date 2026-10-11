@@ -5,6 +5,7 @@ import OperationsTab from '../finances/OperationsTab'
 import StatisticsTab from '../finances/StatisticsTab'
 import BalanceHeader from '../finances/BalanceHeader'
 import BalanceFormModal from '../finances/BalanceFormModal'
+import ImportFormModal from '../finances/ImportFormModal'
 import { financeApi } from '../api/financeApi'
 import { useAuth } from '../auth/AuthContext'
 
@@ -32,6 +33,8 @@ export default function FinancesPage() {
   const [isBalanceLoading, setIsBalanceLoading] = useState(true)
   const [balanceError, setBalanceError] = useState(null)
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [dataVersion, setDataVersion] = useState(0)
 
   const loadBalance = useCallback(() => {
     let cancelled = false
@@ -78,6 +81,11 @@ export default function FinancesPage() {
     setIsBalanceModalOpen(false)
   }
 
+  function handleImported() {
+    loadBalance()
+    setDataVersion((version) => version + 1)
+  }
+
   return (
     <section className="tracker-page">
       <div className="tracker-header">
@@ -90,6 +98,7 @@ export default function FinancesPage() {
           isLoading={isBalanceLoading}
           error={balanceError}
           onEdit={() => setIsBalanceModalOpen(true)}
+          onImport={() => setIsImportModalOpen(true)}
         />
       </div>
 
@@ -116,13 +125,17 @@ export default function FinancesPage() {
 
       {openedTabs[OPERATIONS_TAB] && (
         <div role="tabpanel" aria-label="Операции" hidden={activeTab !== OPERATIONS_TAB}>
-          <OperationsTab isActive={activeTab === OPERATIONS_TAB} onOperationSaved={loadBalance} />
+          <OperationsTab
+            isActive={activeTab === OPERATIONS_TAB}
+            onOperationSaved={loadBalance}
+            refreshToken={dataVersion}
+          />
         </div>
       )}
 
       {openedTabs[STATISTICS_TAB] && (
         <div role="tabpanel" aria-label="Статистика" hidden={activeTab !== STATISTICS_TAB}>
-          <StatisticsTab isActive={activeTab === STATISTICS_TAB} />
+          <StatisticsTab isActive={activeTab === STATISTICS_TAB} refreshToken={dataVersion} />
         </div>
       )}
 
@@ -131,6 +144,13 @@ export default function FinancesPage() {
           startingBalance={balance ? balance.startingBalance : null}
           onClose={() => setIsBalanceModalOpen(false)}
           onSubmit={handleBalanceSubmit}
+        />
+      )}
+
+      {isImportModalOpen && (
+        <ImportFormModal
+          onClose={() => setIsImportModalOpen(false)}
+          onImported={handleImported}
         />
       )}
     </section>

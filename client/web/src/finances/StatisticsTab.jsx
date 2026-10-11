@@ -1,15 +1,14 @@
 import { Fragment, useEffect, useState } from 'react'
 import { financeApi } from '../api/financeApi'
 import { useAuth } from '../auth/AuthContext'
-import { eachIsoDate, firstDayOfMonthIso, formatDayLabel, isAfter, lastDayOfMonthIso } from './dates'
+import { currentMonthIso, eachIsoDate, formatDayLabel, monthRange } from './dates'
 
 const TYPE_ORDER = { EXPENSE: 0, INCOME: 1 }
 
 function orderCategories(categories) {
-  return [...categories].sort((first, second) => {
-    const byType = (TYPE_ORDER[first.type] ?? 2) - (TYPE_ORDER[second.type] ?? 2)
-    return byType !== 0 ? byType : first.id - second.id
-  })
+  return [...categories].sort(
+    (first, second) => (TYPE_ORDER[first.type] ?? 2) - (TYPE_ORDER[second.type] ?? 2),
+  )
 }
 
 function buildBlocks(categories) {
@@ -36,25 +35,26 @@ function formatAmount(value) {
   return Number(value).toFixed(2)
 }
 
-function defaultRange() {
-  return { from: firstDayOfMonthIso(), to: lastDayOfMonthIso() }
+function hasPlan(plannedAmount) {
+  return plannedAmount !== null && plannedAmount !== undefined
 }
 
-export default function StatisticsTab({ isActive = true }) {
+export default function StatisticsTab({ isActive = true, refreshToken = 0 }) {
   const { accessToken } = useAuth()
-  const initialRange = defaultRange()
-  const [applied, setApplied] = useState(initialRange)
-  const [draft, setDraft] = useState(initialRange)
+  const initialMonth = currentMonthIso()
+  const [applied, setApplied] = useState(initialMonth)
+  const [draft, setDraft] = useState(initialMonth)
   const [categories, setCategories] = useState(null)
   const [operations, setOperations] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const [rangeError, setRangeError] = useState(null)
+  const [monthError, setMonthError] = useState(null)
 
   useEffect(() => {
     if (!isActive) {
       return
     }
+    const { from, to } = monthRange(applied)
     let cancelled = false
     Promise.resolve()
       .then(() => {
@@ -62,12 +62,7 @@ export default function StatisticsTab({ isActive = true }) {
           setIsLoading(true)
         }
       })
-      .then(() =>
-        Promise.all([
-          financeApi.listCategories(accessToken),
-          financeApi.listOperationsByRange(accessToken, applied.from, applied.to),
-        ]),
-      )
+      .then(() => Promise.all([financeApi.listCategories(accessToken), financeApi.listOperationsByRange(accessToken, from, to)]))
       .then(([categoryList, operationList]) => {
         if (!cancelled) {
           setCategories(categoryList)
@@ -90,28 +85,26 @@ export default function StatisticsTab({ isActive = true }) {
     return () => {
       cancelled = true
     }
-    // перечитывание при открытии вкладки (isActive) и при смене диапазона (applied)
-  }, [accessToken, isActive, applied])
+    // перечитывание при открытии вкладки (isActive), смене месяца (applied) и после импорта (refreshToken)
+  }, [accessToken, isActive, applied, refreshToken])
 
   function handleApply(event) {
     event.preventDefault()
-    setRangeError(null)
-    if (draft.from === '' || draft.to === '') {
-      setRangeError('Укажите начало и конец диапазона')
-      return
-    }
-    if (isAfter(draft.from, draft.to)) {
-      setRangeError('Начало диапазона не может быть позже конца')
+    setMonthError(null)
+    if (draft === '') {
+      setMonthError('Выберите месяц и год')
       return
     }
     setLoadError(null)
     setApplied(draft)
   }
 
-  const columns = eachIsoDate(applied.from, applied.to)
+  const { from, to } = monthRange(applied)
+  const columns = eachIsoDate(from, to)
   const blocks = categories ? buildBlocks(categories) : []
   const operationByCell = new Map()
   const typeByCategoryId = new Map()
+  const spentByCategoryId = new Map()
   for (const category of categories ?? []) {
     typeByCategoryId.set(category.id, category.type)
   }
@@ -119,6 +112,10 @@ export default function StatisticsTab({ isActive = true }) {
   let expenseTotal = 0
   for (const operation of operations ?? []) {
     operationByCell.set(`${operation.categoryId}|${operation.date}`, operation)
+    spentByCategoryId.set(
+      operation.categoryId,
+      (spentByCategoryId.get(operation.categoryId) ?? 0) + Number(operation.amount),
+    )
     const type = typeByCategoryId.get(operation.categoryId)
     if (type === 'INCOME') {
       incomeTotal += Number(operation.amount)
@@ -131,23 +128,13 @@ export default function StatisticsTab({ isActive = true }) {
     <div className="finances-tab">
       <form className="stats-controls" onSubmit={handleApply} noValidate>
         <div className="auth-field">
-          <label htmlFor="finance-stats-from">С</label>
+          <label htmlFor="finance-stats-month">Месяц и год</label>
           <input
-            id="finance-stats-from"
-            name="from"
-            type="date"
-            value={draft.from}
-            onChange={(event) => setDraft((current) => ({ ...current, from: event.target.value }))}
-          />
-        </div>
-        <div className="auth-field">
-          <label htmlFor="finance-stats-to">По</label>
-          <input
-            id="finance-stats-to"
-            name="to"
-            type="date"
-            value={draft.to}
-            onChange={(event) => setDraft((current) => ({ ...current, to: event.target.value }))}
+            id="finance-stats-month"
+            name="month"
+            type="month"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
           />
         </div>
         <button type="submit" className="auth-submit">
@@ -155,9 +142,9 @@ export default function StatisticsTab({ isActive = true }) {
         </button>
       </form>
 
-      {rangeError && (
+      {monthError && (
         <p className="tracker-error" role="alert">
-          {rangeError}
+          {monthError}
         </p>
       )}
 
@@ -188,6 +175,12 @@ export default function StatisticsTab({ isActive = true }) {
                 <th scope="col" colSpan={2} className="stats-habit-name">
                   Категория
                 </th>
+                <th scope="col" className="stats-plan-column">
+                  План
+                </th>
+                <th scope="col" className="stats-delta-column">
+                  Дельта
+                </th>
                 {columns.map((column) => (
                   <th key={column} scope="col" className="stats-day-label" title={column}>
                     {formatDayLabel(column)}
@@ -198,30 +191,34 @@ export default function StatisticsTab({ isActive = true }) {
             <tbody>
               {blocks.map((block) => (
                 <Fragment key={block.key}>
-                  {block.categories.map((category, index) => (
-                    <tr key={category.id} className={`operation-row-${category.type.toLowerCase()}`}>
-                      {block.group && index === 0 && (
-                        <th
-                          scope="rowgroup"
-                          rowSpan={block.categories.length}
-                          className="finance-stats-group"
-                        >
-                          {block.group}
+                  {block.categories.map((category, index) => {
+                    const planned = hasPlan(category.plannedAmount) ? formatAmount(category.plannedAmount) : ''
+                    const delta = hasPlan(category.plannedAmount)
+                      ? formatAmount(Number(category.plannedAmount) - (spentByCategoryId.get(category.id) ?? 0))
+                      : ''
+                    return (
+                      <tr key={category.id} className={`operation-row-${category.type.toLowerCase()}`}>
+                        {block.group && index === 0 && (
+                          <th scope="rowgroup" rowSpan={block.categories.length} className="finance-stats-group">
+                            {block.group}
+                          </th>
+                        )}
+                        <th scope="row" colSpan={block.group ? 1 : 2} className="stats-habit-name">
+                          {category.name}
                         </th>
-                      )}
-                      <th scope="row" colSpan={block.group ? 1 : 2} className="stats-habit-name">
-                        {category.name}
-                      </th>
-                      {columns.map((column) => {
-                        const operation = operationByCell.get(`${category.id}|${column}`)
-                        return (
-                          <td key={column} className="stats-cell finance-stats-cell">
-                            {operation ? formatAmount(operation.amount) : ''}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
+                        <td className="stats-cell finance-stats-plan">{planned}</td>
+                        <td className="stats-cell finance-stats-delta">{delta}</td>
+                        {columns.map((column) => {
+                          const operation = operationByCell.get(`${category.id}|${column}`)
+                          return (
+                            <td key={column} className="stats-cell finance-stats-cell">
+                              {operation ? formatAmount(operation.amount) : ''}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
                 </Fragment>
               ))}
             </tbody>

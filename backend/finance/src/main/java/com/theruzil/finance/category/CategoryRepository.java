@@ -9,5 +9,7 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     Optional<Category> findByIdAndUserId(Long id, Long userId);
 
-    List<Category> findByUserIdOrderById(Long userId);
+    List<Category> findByUserIdOrderBySortOrderAscIdAsc(Long userId);
+
+    Optional<Category> findTopByUserIdAndTypeOrderBySortOrderDesc(Long userId, CategoryType type);
 }

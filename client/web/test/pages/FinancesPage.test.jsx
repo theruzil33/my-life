@@ -17,10 +17,12 @@ vi.mock('../../src/api/financeApi', () => ({
     createCategory: vi.fn(),
     updateCategory: vi.fn(),
     removeCategory: vi.fn(),
+    reorderCategories: vi.fn(),
     listOperationsByDate: vi.fn(),
     listOperationsByRange: vi.fn(),
     saveOperation: vi.fn(),
     removeOperation: vi.fn(),
+    importFile: vi.fn(),
   },
 }))
 
@@ -64,10 +66,12 @@ beforeEach(() => {
   financeApi.createCategory.mockResolvedValue({ id: 13 })
   financeApi.updateCategory.mockResolvedValue({ id: 11 })
   financeApi.removeCategory.mockResolvedValue(null)
+  financeApi.reorderCategories.mockResolvedValue(null)
   financeApi.listOperationsByDate.mockResolvedValue([])
   financeApi.listOperationsByRange.mockResolvedValue([])
   financeApi.saveOperation.mockResolvedValue({ id: 1 })
   financeApi.removeOperation.mockResolvedValue(null)
+  financeApi.importFile.mockResolvedValue({ createdCategories: 1, savedOperations: 2 })
 })
 
 describe('FinancesPage', () => {
@@ -281,6 +285,30 @@ describe('FinancesPage', () => {
     expect(await within(panel).findByText('У вас пока нет категорий.')).toBeInTheDocument()
   })
 
+  it('располагает кнопки действий последовательно и показывает план после них', async () => {
+    financeApi.listCategories.mockResolvedValue([
+      { id: 11, type: 'INCOME', name: 'Зарплата', group: null, plannedAmount: 500 },
+      { id: 12, type: 'EXPENSE', name: 'Продукты', group: null, plannedAmount: null },
+    ])
+    const user = userEvent.setup()
+    const panel = await openCategories(user)
+
+    const salaryItem = (await within(panel).findByText('Зарплата')).closest('.category-item')
+    const actions = salaryItem.querySelector('.category-actions')
+    expect(actions.querySelectorAll('button')).toHaveLength(2)
+    expect(Array.from(actions.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
+      'Редактировать',
+      'Удалить',
+    ])
+
+    const plan = salaryItem.querySelector('.category-plan')
+    expect(plan).toHaveTextContent('500.00')
+    expect(actions.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const productsItem = within(panel).getByText('Продукты').closest('.category-item')
+    expect(productsItem.querySelector('.category-plan')).toBeNull()
+  })
+
   it('создаёт категорию с типом, названием и группой', async () => {
     const user = userEvent.setup()
     const panel = await openCategories(user)
@@ -299,11 +327,55 @@ describe('FinancesPage', () => {
         type: 'INCOME',
         name: 'Подарок',
         group: 'Работа',
+        plannedAmount: null,
       })
     })
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+  })
+
+  it('создаёт категорию с плановой суммой', async () => {
+    const user = userEvent.setup()
+    const panel = await openCategories(user)
+
+    await within(panel).findByText('Зарплата')
+    await user.click(within(panel).getByRole('button', { name: 'Добавить категорию' }))
+
+    const dialog = screen.getByRole('dialog')
+    await user.selectOptions(within(dialog).getByLabelText('Тип'), 'EXPENSE')
+    await user.type(within(dialog).getByLabelText('Название'), 'Продукты')
+    await user.type(within(dialog).getByLabelText('Группа'), 'Еда')
+    await user.type(within(dialog).getByLabelText('Плановая сумма в месяц'), '1500.50')
+    await user.click(within(dialog).getByRole('button', { name: 'Создать' }))
+
+    await waitFor(() => {
+      expect(financeApi.createCategory).toHaveBeenCalledWith('token', {
+        type: 'EXPENSE',
+        name: 'Продукты',
+        group: 'Еда',
+        plannedAmount: 1500.5,
+      })
+    })
+  })
+
+  it('не создаёт категорию с недопустимой плановой суммой', async () => {
+    const user = userEvent.setup()
+    const panel = await openCategories(user)
+
+    await within(panel).findByText('Зарплата')
+    await user.click(within(panel).getByRole('button', { name: 'Добавить категорию' }))
+
+    const dialog = screen.getByRole('dialog')
+    await user.selectOptions(within(dialog).getByLabelText('Тип'), 'EXPENSE')
+    await user.type(within(dialog).getByLabelText('Название'), 'Продукты')
+    await user.type(within(dialog).getByLabelText('Плановая сумма в месяц'), '0')
+    await user.click(within(dialog).getByRole('button', { name: 'Создать' }))
+
+    expect(financeApi.createCategory).not.toHaveBeenCalled()
+    expect(
+      within(dialog).getByText('Плановая сумма должна быть положительным числом'),
+    ).toBeInTheDocument()
   })
 
   it('не создаёт категорию без типа и названия', async () => {
@@ -342,7 +414,37 @@ describe('FinancesPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => {
-      expect(financeApi.updateCategory).toHaveBeenCalledWith('token', 11, { name: 'Премия', group: 'Бонусы' })
+      expect(financeApi.updateCategory).toHaveBeenCalledWith('token', 11, {
+        name: 'Премия',
+        group: 'Бонусы',
+        plannedAmount: null,
+      })
+    })
+  })
+
+  it('предзаполняет план при редактировании и убирает его пустым полем', async () => {
+    financeApi.listCategories.mockResolvedValue([
+      { id: 11, type: 'INCOME', name: 'Зарплата', group: 'Работа', plannedAmount: 800 },
+    ])
+    const user = userEvent.setup()
+    const panel = await openCategories(user)
+
+    await within(panel).findByText('Зарплата')
+    await user.click(within(panel).getByRole('button', { name: 'Редактировать Зарплата' }))
+
+    const dialog = screen.getByRole('dialog')
+    const planInput = within(dialog).getByLabelText('Плановая сумма в месяц')
+    expect(planInput).toHaveValue('800.00')
+
+    await user.clear(planInput)
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => {
+      expect(financeApi.updateCategory).toHaveBeenCalledWith('token', 11, {
+        name: 'Зарплата',
+        group: 'Работа',
+        plannedAmount: null,
+      })
     })
   })
 
@@ -393,5 +495,139 @@ describe('FinancesPage', () => {
 
     expect(financeApi.removeCategory).not.toHaveBeenCalled()
     expect(within(panel).getByText('Зарплата')).toBeInTheDocument()
+  })
+
+  it('изменение порядка на вкладке «Категории» отражается в перечитываемом списке', async () => {
+    let stored = [
+      { id: 11, type: 'INCOME', name: 'Зарплата', group: null },
+      { id: 13, type: 'INCOME', name: 'Премия', group: null },
+      { id: 12, type: 'EXPENSE', name: 'Продукты', group: null },
+    ]
+    financeApi.listCategories.mockImplementation(() => Promise.resolve(stored))
+    financeApi.reorderCategories.mockImplementation((token, type, ids) => {
+      const byId = new Map(stored.map((category) => [category.id, category]))
+      const rest = stored.filter((category) => category.type !== type)
+      stored = [...ids.map((id) => byId.get(id)), ...rest]
+      return Promise.resolve(null)
+    })
+
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('tab', { name: 'Категории' }))
+    const panel = screen.getByRole('tabpanel', { name: 'Категории' })
+    await within(panel).findByText('Зарплата')
+
+    await user.click(within(panel).getByRole('button', { name: 'Переместить «Зарплата» ниже' }))
+    await waitFor(() => {
+      expect(financeApi.reorderCategories).toHaveBeenCalledWith('token', 'INCOME', [13, 11])
+    })
+
+    await user.click(screen.getByRole('tab', { name: 'Операции' }))
+    const operationsPanel = screen.getByRole('tabpanel', { name: 'Операции' })
+    await within(operationsPanel).findByLabelText('Сумма Премия')
+    const rows = operationsPanel.querySelectorAll('.operation-row')
+    expect(rows[0]).toHaveTextContent('Продукты')
+    expect(rows[1]).toHaveTextContent('Премия')
+    expect(rows[2]).toHaveTextContent('Зарплата')
+  })
+
+  it('показывает кнопку импорта рядом с изменением начального баланса и открывает модальное окно', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    const header = document.querySelector('.balance-header')
+    const buttons = header.querySelectorAll('button')
+    expect(buttons[0]).toHaveTextContent('Изменить начальный баланс')
+    expect(buttons[1]).toHaveTextContent('Импорт')
+
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByLabelText('Месяц и год')).toHaveAttribute('type', 'month')
+    expect(within(dialog).getByLabelText('Файл CSV')).toHaveAttribute('type', 'file')
+  })
+
+  it('импортирует файл, показывает сводку и перечитывает данные', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    expect(financeApi.getBalance).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(within(dialog).getByLabelText('Файл CSV'), new File(['csv'], 'Деньги.csv', { type: 'text/csv' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(financeApi.importFile).toHaveBeenCalledWith('token', {
+      year: expect.any(Number),
+      month: expect.any(Number),
+      file: expect.any(File),
+    })
+    expect(await within(dialog).findByText('Создано категорий: 1. Записано операций: 2.')).toBeInTheDocument()
+    await waitFor(() => expect(financeApi.getBalance).toHaveBeenCalledTimes(2))
+  })
+
+  it('не отправляет импорт без выбранного файла', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Выберите файл для импорта')
+    expect(financeApi.importFile).not.toHaveBeenCalled()
+  })
+
+  it('показывает ошибку импорта', async () => {
+    financeApi.importFile.mockRejectedValue(new Error('Файл не содержит статей'))
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(within(dialog).getByLabelText('Файл CSV'), new File(['csv'], 'Деньги.csv', { type: 'text/csv' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Файл не содержит статей')
+    expect(within(dialog).queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('блокирует повторный импорт во время запроса', async () => {
+    const pending = deferred()
+    financeApi.importFile.mockReturnValue(pending.promise)
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(within(dialog).getByLabelText('Файл CSV'), new File(['csv'], 'Деньги.csv', { type: 'text/csv' }))
+    const submit = within(dialog).getByRole('button', { name: 'Импортировать' })
+    await user.click(submit)
+
+    expect(financeApi.importFile).toHaveBeenCalledTimes(1)
+    expect(submit).toBeDisabled()
+
+    pending.resolve({ createdCategories: 0, savedOperations: 0 })
+    await waitFor(() => expect(submit).not.toBeDisabled())
+  })
+
+  it('закрывает модальное окно импорта без отправки', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('1300.00')
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(financeApi.importFile).not.toHaveBeenCalled()
   })
 })

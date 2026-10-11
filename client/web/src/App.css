@@ -493,6 +493,29 @@
   text-align: left;
 }
 
+.category-group-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.category-group-move {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: none;
+}
+
+.category-move {
+  min-width: 36px;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
 .category-group-start {
   margin-top: 16px;
 }
@@ -519,6 +542,8 @@
 }
 
 .category-name {
+  flex: 1;
+  min-width: 0;
   color: var(--text-h);
 }
 
@@ -531,8 +556,28 @@
 }
 
 .category-type {
+  flex: none;
+  min-width: 56px;
+  text-align: right;
   color: var(--text);
   font-size: 0.9em;
+}
+
+.category-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.category-plan {
+  flex: none;
+  min-width: 72px;
+  text-align: right;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .operations-date {
@@ -623,6 +668,20 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--text-h);
+}
+
+.finance-stats-matrix .stats-plan-column,
+.finance-stats-matrix .stats-delta-column {
+  min-width: 72px;
+  white-space: nowrap;
+}
+
+.finance-stats-matrix .finance-stats-plan,
+.finance-stats-matrix .finance-stats-delta {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+  white-space: nowrap;
 }
 
 .finance-stats-group {

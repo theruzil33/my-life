@@ -141,6 +141,49 @@ class ProxyRoutingTest {
     }
 
     @Test
+    void forwardsMultipartBodyAndContentTypeToFinanceService() throws IOException {
+        String bearer = jwtService.issueAccessToken(42L);
+        String boundary = "----GatewayBoundary" + UUID.randomUUID();
+        byte[] multipartBody = ("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"Деньги.csv\"\r\n"
+                + "Content-Type: text/csv\r\n\r\n"
+                + "Статьи расходов\r\n"
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"year\"\r\n\r\n2026\r\n"
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"month\"\r\n\r\n5\r\n"
+                + "--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
+
+        ResponseEntity<byte[]> response = RestClient.create().method(HttpMethod.POST)
+                .uri("http://localhost:" + gatewayPort + "/finances/imports")
+                .headers(headers -> {
+                    headers.setBearerAuth(bearer);
+                    headers.setContentType(MediaType.parseMediaType("multipart/form-data; boundary=" + boundary));
+                    headers.set(HttpHeaders.COOKIE, csrfCookieHeader);
+                    headers.set("X-XSRF-TOKEN", csrfToken);
+                })
+                .body(multipartBody)
+                .exchange((clientRequest, clientResponse) -> {
+                    try {
+                        return ResponseEntity.status(clientResponse.getStatusCode())
+                                .headers(clientResponse.getHeaders())
+                                .body(clientResponse.getBody().readAllBytes());
+                    }
+                    catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                    }
+                });
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(body(response)).contains("\"method\":\"POST\"");
+        assertThat(body(response)).contains("\"path\":\"/finances/imports\"");
+        assertThat(body(response)).contains("\"userId\":\"42\"");
+        assertThat(body(response)).contains("multipart/form-data;boundary=" + boundary);
+        assertThat(body(response)).contains(boundary);
+        assertThat(body(response)).contains("Статьи расходов");
+    }
+
+    @Test
     void unknownPrefixReturnsNotFoundWithoutCallingService() {
         String token = jwtService.issueAccessToken(42L);
         int requestsBefore = STUB_REQUEST_COUNT.get();
@@ -322,6 +365,7 @@ class ProxyRoutingTest {
         payload.put("query", String.valueOf(exchange.getRequestURI().getRawQuery()));
         payload.put("userId", String.valueOf(exchange.getRequestHeaders().getFirst("X-User-Id")));
         payload.put("authorization", String.valueOf(exchange.getRequestHeaders().getFirst("Authorization")));
+        payload.put("contentType", String.valueOf(exchange.getRequestHeaders().getFirst("Content-Type")));
         payload.put("cookie", String.valueOf(exchange.getRequestHeaders().getFirst("Cookie")));
         payload.put("xsrf", String.valueOf(exchange.getRequestHeaders().getFirst("X-XSRF-TOKEN")));
         payload.put("body", new String(requestBody, StandardCharsets.UTF_8));

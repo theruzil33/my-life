@@ -12,6 +12,7 @@ import com.theruzil.finance.balance.InvalidBalanceDataException;
 import com.theruzil.finance.category.CategoryInUseException;
 import com.theruzil.finance.category.CategoryNotFoundException;
 import com.theruzil.finance.category.InvalidCategoryDataException;
+import com.theruzil.finance.importing.InvalidImportDataException;
 import com.theruzil.finance.operation.InvalidOperationDataException;
 import com.theruzil.finance.operation.OperationNotFoundException;
 
@@ -51,6 +52,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidOperationDataException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiError handleInvalidOperationData(InvalidOperationDataException ex) {
+        return new ApiError(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidImportDataException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiError handleInvalidImportData(InvalidImportDataException ex) {
         return new ApiError(ex.getMessage());
     }
 

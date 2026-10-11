@@ -37,6 +37,22 @@ beforeEach(() => {
 })
 
 describe('OperationsTab', () => {
+  it('сохраняет порядок категорий одного типа из ответа API, а не по идентификатору', async () => {
+    financeApi.listCategories.mockResolvedValue([
+      { id: 30, type: 'INCOME', name: 'Первая', group: null },
+      { id: 10, type: 'INCOME', name: 'Вторая', group: null },
+    ])
+    financeApi.listOperationsByDate.mockResolvedValue([])
+
+    render(<OperationsTab />)
+
+    await screen.findByLabelText('Сумма Первая')
+    const rows = document.querySelectorAll('.operation-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('Первая')
+    expect(rows[1]).toHaveTextContent('Вторая')
+  })
+
   it('показывает категории ухода перед приходом и сумму существующей операции', async () => {
     render(<OperationsTab />)
 
