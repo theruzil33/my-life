@@ -13,6 +13,7 @@ export default function ActivityListTab({
   modalTitle,
   entityLabel,
   renameTitle,
+  refreshToken = 0,
 }) {
   const { accessToken } = useAuth()
   const [date, setDate] = useState(todayIso())
@@ -54,7 +55,7 @@ export default function ActivityListTab({
     return () => {
       cancelled = true
     }
-  }, [accessToken, date, type, reloadCounter])
+  }, [accessToken, date, type, reloadCounter, refreshToken])
 
   function handleDateChange(event) {
     const nextDate = event.target.value

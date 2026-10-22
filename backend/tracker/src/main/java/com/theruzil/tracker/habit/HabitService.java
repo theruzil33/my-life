@@ -5,10 +5,12 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -20,6 +22,7 @@ import com.theruzil.tracker.habit.dto.HabitHistoryResponse;
 import com.theruzil.tracker.habit.dto.HabitOnDateResponse;
 import com.theruzil.tracker.habit.dto.HabitRequest;
 import com.theruzil.tracker.habit.dto.HabitResponse;
+import com.theruzil.tracker.habit.dto.ImportedActivityResult;
 
 @Service
 public class HabitService {
@@ -113,6 +116,48 @@ public class HabitService {
         validateCompletionDate(habit, date);
         completionRepository.deleteByHabitIdAndCompletedOn(habitId, date);
         return toOnDateResponse(habit, date, false);
+    }
+
+    @Transactional
+    public ImportedActivityResult importActivity(Long userId, ActivityType type, String name, LocalDate startDate,
+            Collection<LocalDate> completionDates) {
+        Habit habit = habitRepository.findByUserIdAndTypeAndNameOrderById(userId, type, name).stream()
+                .findFirst()
+                .orElse(null);
+        boolean created = false;
+        if (habit == null) {
+            Instant now = Instant.now(clock);
+            habit = habitRepository.save(new Habit(userId, type, name, startDate, HabitFrequency.DAILY, Set.of(), now));
+            created = true;
+        }
+        int saved = saveImportedCompletions(habit, completionDates);
+        return new ImportedActivityResult(created, saved);
+    }
+
+    private int saveImportedCompletions(Habit habit, Collection<LocalDate> completionDates) {
+        if (completionDates == null || completionDates.isEmpty()) {
+            return 0;
+        }
+        Instant now = Instant.now(clock);
+        LocalDate today = today();
+        List<HabitCompletion> completions = new ArrayList<>();
+        for (LocalDate date : completionDates) {
+            if (date == null || date.isAfter(today)) {
+                continue;
+            }
+            if (!habit.isScheduledOn(date)) {
+                continue;
+            }
+            if (completionRepository.existsByHabitIdAndCompletedOn(habit.getId(), date)) {
+                continue;
+            }
+            completions.add(new HabitCompletion(habit.getId(), date, now));
+        }
+        if (completions.isEmpty()) {
+            return 0;
+        }
+        completionRepository.saveAll(completions);
+        return completions.size();
     }
 
     private void validateDefinition(HabitRequest request) {

@@ -15,6 +15,10 @@ export function todayIso() {
   return toIsoDate(new Date())
 }
 
+export function currentMonthIso(reference = new Date()) {
+  return `${reference.getFullYear()}-${pad(reference.getMonth() + 1)}`
+}
+
 export function firstDayOfMonthIso(reference = new Date()) {
   return toIsoDate(new Date(reference.getFullYear(), reference.getMonth(), 1))
 }

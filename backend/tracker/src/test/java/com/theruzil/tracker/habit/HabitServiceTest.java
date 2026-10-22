@@ -3,6 +3,7 @@ package com.theruzil.tracker.habit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -31,6 +32,7 @@ import com.theruzil.tracker.habit.dto.HabitHistoryResponse;
 import com.theruzil.tracker.habit.dto.HabitOnDateResponse;
 import com.theruzil.tracker.habit.dto.HabitRequest;
 import com.theruzil.tracker.habit.dto.HabitResponse;
+import com.theruzil.tracker.habit.dto.ImportedActivityResult;
 
 @ExtendWith(MockitoExtension.class)
 class HabitServiceTest {
@@ -568,6 +570,65 @@ class HabitServiceTest {
     }
 
     @Test
+    void importActivityCreatesActivityAndSavesScheduledCompletions() {
+        when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "Habit")).thenReturn(List.of());
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> {
+            Habit saved = invocation.getArgument(0);
+            setId(saved, 1L);
+            return saved;
+        });
+        when(completionRepository.existsByHabitIdAndCompletedOn(eq(1L), any(LocalDate.class))).thenReturn(false);
+
+        ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1),
+                List.of(LocalDate.of(2026, 5, 1), TODAY, TODAY.plusDays(1)));
+
+        assertThat(result.created()).isTrue();
+        assertThat(result.savedCompletions()).isEqualTo(2);
+        assertThat(capturedSavedCompletions()).containsExactly(LocalDate.of(2026, 5, 1), TODAY);
+    }
+
+    @Test
+    void importActivityReusesExistingActivity() {
+        Habit habit = habitWithId(5L, USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1), HabitFrequency.DAILY, Set.of());
+        when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "Habit")).thenReturn(List.of(habit));
+        when(completionRepository.existsByHabitIdAndCompletedOn(eq(5L), any(LocalDate.class))).thenReturn(false);
+
+        ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1),
+                List.of(LocalDate.of(2026, 5, 1)));
+
+        assertThat(result.created()).isFalse();
+        assertThat(result.savedCompletions()).isEqualTo(1);
+        verify(habitRepository, never()).save(any(Habit.class));
+    }
+
+    @Test
+    void importActivitySkipsDaysOutsideSchedule() {
+        Habit habit = habitWithId(5L, USER_ID, HABIT, "weekly", LocalDate.of(2026, 5, 1),
+                HabitFrequency.SPECIFIC_WEEKDAYS, Set.of(DayOfWeek.MONDAY));
+        when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "weekly")).thenReturn(List.of(habit));
+        when(completionRepository.existsByHabitIdAndCompletedOn(eq(5L), any(LocalDate.class))).thenReturn(false);
+
+        ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "weekly", LocalDate.of(2026, 5, 1),
+                List.of(LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 4)));
+
+        assertThat(result.savedCompletions()).isEqualTo(1);
+        assertThat(capturedSavedCompletions()).containsExactly(LocalDate.of(2026, 5, 4));
+    }
+
+    @Test
+    void importActivityDoesNotDuplicateExistingCompletion() {
+        Habit habit = habitWithId(5L, USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1), HabitFrequency.DAILY, Set.of());
+        when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "Habit")).thenReturn(List.of(habit));
+        when(completionRepository.existsByHabitIdAndCompletedOn(eq(5L), any(LocalDate.class))).thenReturn(true);
+
+        ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1),
+                List.of(LocalDate.of(2026, 5, 1)));
+
+        assertThat(result.savedCompletions()).isZero();
+        verify(completionRepository, never()).saveAll(any());
+    }
+
+    @Test
     void todayIsComputedInConfiguredZone() {
         Instant lateEveningUtc = Instant.parse("2026-05-13T23:30:00Z");
         LocalDate nextDayInMoscow = LocalDate.of(2026, 5, 14);
@@ -586,6 +647,15 @@ class HabitServiceTest {
 
     @SuppressWarnings("unchecked")
     private List<LocalDate> capturedCompletionDates() {
+        ArgumentCaptor<Iterable<HabitCompletion>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(completionRepository).saveAll(captor.capture());
+        return StreamSupport.stream(captor.getValue().spliterator(), false)
+                .map(HabitCompletion::getCompletedOn)
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<LocalDate> capturedSavedCompletions() {
         ArgumentCaptor<Iterable<HabitCompletion>> captor = ArgumentCaptor.forClass(Iterable.class);
         verify(completionRepository).saveAll(captor.capture());
         return StreamSupport.stream(captor.getValue().spliterator(), false)

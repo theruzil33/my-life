@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import TrackerPage from '../../src/pages/TrackerPage'
@@ -18,6 +18,7 @@ vi.mock('../../src/api/trackerApi', () => ({
     create: vi.fn(),
     markCompleted: vi.fn(),
     unmarkCompleted: vi.fn(),
+    importFile: vi.fn(),
   },
 }))
 
@@ -49,6 +50,7 @@ beforeEach(() => {
   authApi.refresh.mockResolvedValue({ accessToken: 'jwt-token', email: 'user@example.com' })
   trackerApi.listOnDate.mockResolvedValue([])
   trackerApi.history.mockResolvedValue([])
+  trackerApi.importFile.mockResolvedValue({ createdActivities: 1, savedCompletions: 2 })
 })
 
 describe('TrackerPage', () => {
@@ -124,5 +126,87 @@ describe('TrackerPage', () => {
 
     expect(await screen.findByText('Форма входа')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Трекер привычек' })).not.toBeInTheDocument()
+  })
+
+  it('показывает кнопку импорта и открывает модальное окно', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByLabelText('Месяц и год')).toHaveAttribute('type', 'month')
+    expect(within(dialog).getByLabelText('Файл CSV')).toHaveAttribute('type', 'file')
+  })
+
+  it('импортирует файл, показывает сводку и перечитывает данные', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await waitFor(() => expect(trackerApi.listOnDate).toHaveBeenCalledTimes(1))
+
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(
+      within(dialog).getByLabelText('Файл CSV'),
+      new File(['csv'], 'Продуктивность.csv', { type: 'text/csv' }),
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(trackerApi.importFile).toHaveBeenCalledWith('jwt-token', {
+      year: expect.any(Number),
+      month: expect.any(Number),
+      file: expect.any(File),
+    })
+    expect(
+      await within(dialog).findByText('Создано активностей: 1. Сохранено отметок: 2.'),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(trackerApi.listOnDate).toHaveBeenCalledTimes(2))
+  })
+
+  it('не отправляет импорт без выбранного файла', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Выберите файл для импорта')
+    expect(trackerApi.importFile).not.toHaveBeenCalled()
+  })
+
+  it('показывает ошибку импорта', async () => {
+    trackerApi.importFile.mockRejectedValue(new Error('Файл не содержит активностей'))
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.upload(
+      within(dialog).getByLabelText('Файл CSV'),
+      new File(['csv'], 'Продуктивность.csv', { type: 'text/csv' }),
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Импортировать' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Файл не содержит активностей')
+    expect(within(dialog).queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('закрывает модальное окно импорта без отправки', async () => {
+    const user = userEvent.setup()
+    renderTracker()
+
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await user.click(screen.getByRole('button', { name: 'Импорт' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trackerApi.importFile).not.toHaveBeenCalled()
   })
 })

@@ -16,6 +16,8 @@ public interface HabitRepository extends JpaRepository<Habit, Long> {
     @Query("select min(h.startDate) from Habit h where h.userId = :userId")
     Optional<LocalDate> findEarliestStartDate(@Param("userId") Long userId);
 
+    List<Habit> findByUserIdAndTypeAndNameOrderById(Long userId, ActivityType type, String name);
+
     @Query("""
             select h from Habit h
             where h.userId = :userId

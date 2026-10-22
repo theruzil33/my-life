@@ -170,6 +170,12 @@
   margin: 0;
 }
 
+.tracker-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .tracker-tabs {
   display: flex;
   justify-content: center;

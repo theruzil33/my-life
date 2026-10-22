@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { trackerApi } from '../api/trackerApi'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -20,7 +20,7 @@ function defaultRange() {
   return { from: firstDayOfMonthIso(), to: todayIso() }
 }
 
-export default function StatisticsTab() {
+export default function StatisticsTab({ refreshToken = 0 }) {
   const { accessToken } = useAuth()
   const [applied, setApplied] = useState(defaultRange)
   const [draft, setDraft] = useState(defaultRange)
@@ -28,6 +28,7 @@ export default function StatisticsTab() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [rangeError, setRangeError] = useState(null)
+  const appliedRef = useRef(applied)
 
   const loadRange = useCallback(
     async (range, fallbackRange) => {
@@ -79,6 +80,30 @@ export default function StatisticsTab() {
     // начальная загрузка диапазона по умолчанию выполняется один раз при открытии вкладки
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    appliedRef.current = applied
+  }, [applied])
+
+  useEffect(() => {
+    if (refreshToken === 0) {
+      return
+    }
+    let cancelled = false
+    Promise.resolve().then(() => {
+      if (cancelled) {
+        return
+      }
+      setError(null)
+      setIsLoading(true)
+      loadRange(appliedRef.current, appliedRef.current)
+    })
+    return () => {
+      cancelled = true
+    }
+    // refreshToken — внешний ключ обновления данных после импорта
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken])
 
   function handleApply(event) {
     event.preventDefault()

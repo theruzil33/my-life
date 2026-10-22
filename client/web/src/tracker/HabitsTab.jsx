@@ -1,7 +1,7 @@
 import { ACTIVITY_TYPE } from './habitOptions'
 import ActivityListTab from './ActivityListTab'
 
-export default function HabitsTab() {
+export default function HabitsTab({ refreshToken = 0 }) {
   return (
     <ActivityListTab
       type={ACTIVITY_TYPE.HABIT}
@@ -11,6 +11,7 @@ export default function HabitsTab() {
       modalTitle="Новая привычка"
       entityLabel="привычки"
       renameTitle="Переименовать привычку"
+      refreshToken={refreshToken}
     />
   )
 }

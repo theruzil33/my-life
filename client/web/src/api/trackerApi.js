@@ -72,4 +72,17 @@ export const trackerApi = {
       requiresAuth: true,
     })
   },
+
+  importFile(token, { year, month, file }) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('year', year)
+    formData.append('month', month)
+    return request('/tracker/imports', {
+      method: 'POST',
+      body: formData,
+      token,
+      requiresAuth: true,
+    })
+  },
 }

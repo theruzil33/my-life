@@ -3,6 +3,7 @@ import { useState } from 'react'
 import HabitsTab from '../tracker/HabitsTab'
 import TasksTab from '../tracker/TasksTab'
 import StatisticsTab from '../tracker/StatisticsTab'
+import ImportFormModal from '../tracker/ImportFormModal'
 
 const HABITS_TAB = 'habits'
 const TASKS_TAB = 'tasks'
@@ -21,10 +22,16 @@ export default function TrackerPage() {
     [TASKS_TAB]: false,
     [STATISTICS_TAB]: false,
   })
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [dataVersion, setDataVersion] = useState(0)
 
   function selectTab(tab) {
     setActiveTab(tab)
     setOpenedTabs((tabs) => (tabs[tab] ? tabs : { ...tabs, [tab]: true }))
+  }
+
+  function handleImported() {
+    setDataVersion((version) => version + 1)
   }
 
   return (
@@ -33,7 +40,12 @@ export default function TrackerPage() {
         <Link className="tracker-back" to="/">
           ← На главную
         </Link>
-        <h1 className="tracker-title">Трекер привычек</h1>
+        <div className="tracker-header-row">
+          <h1 className="tracker-title">Трекер привычек</h1>
+          <button type="button" className="balance-edit" onClick={() => setIsImportModalOpen(true)}>
+            Импорт
+          </button>
+        </div>
       </div>
 
       <div className="tracker-tabs" role="tablist" aria-label="Разделы трекера">
@@ -52,19 +64,26 @@ export default function TrackerPage() {
       </div>
 
       <div role="tabpanel" aria-label="Привычки" hidden={activeTab !== HABITS_TAB}>
-        <HabitsTab />
+        <HabitsTab refreshToken={dataVersion} />
       </div>
 
       {openedTabs[TASKS_TAB] && (
         <div role="tabpanel" aria-label="Задачи" hidden={activeTab !== TASKS_TAB}>
-          <TasksTab />
+          <TasksTab refreshToken={dataVersion} />
         </div>
       )}
 
       {openedTabs[STATISTICS_TAB] && (
         <div role="tabpanel" aria-label="Статистика" hidden={activeTab !== STATISTICS_TAB}>
-          <StatisticsTab />
+          <StatisticsTab refreshToken={dataVersion} />
         </div>
+      )}
+
+      {isImportModalOpen && (
+        <ImportFormModal
+          onClose={() => setIsImportModalOpen(false)}
+          onImported={handleImported}
+        />
       )}
     </section>
   )
