@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import com.theruzil.tracker.habit.ActivityType;
+import com.theruzil.tracker.habit.TimeOfDay;
 
 class ProductivityCsvParserTest {
 
@@ -35,7 +36,8 @@ class ProductivityCsvParserTest {
                 "Чистил зубы,Утром,Привычка,,,1");
 
         assertThat(activities).hasSize(1);
-        assertThat(activities.get(0).name()).isEqualTo("Чистил зубы (Утром)");
+        assertThat(activities.get(0).name()).isEqualTo("Чистил зубы");
+        assertThat(activities.get(0).timeOfDay()).containsExactly(TimeOfDay.MORNING);
     }
 
     @Test
@@ -44,15 +46,18 @@ class ProductivityCsvParserTest {
                 "Чистил зубы,Утром,Привычка,1",
                 ",Вечером,Привычка,1");
 
-        assertThat(activities).extracting(ImportActivity::name)
-                .containsExactly("Чистил зубы (Утром)", "Чистил зубы (Вечером)");
+        assertThat(activities).hasSize(1);
+        assertThat(activities.get(0).name()).isEqualTo("Чистил зубы");
+        assertThat(activities.get(0).timeOfDay()).containsExactlyInAnyOrder(TimeOfDay.MORNING, TimeOfDay.EVENING);
+        assertThat(activities.get(0).lines()).hasSize(2);
     }
 
     @Test
     void variantIsIncludedInName() {
-        List<ImportActivity> activities = parse("Крем для рук,Вечером,Привычка,1");
+        List<ImportActivity> activities = parse("Крем для рук,На работе,Привычка,1");
 
-        assertThat(activities.get(0).name()).isEqualTo("Крем для рук (Вечером)");
+        assertThat(activities.get(0).name()).isEqualTo("Крем для рук (На работе)");
+        assertThat(activities.get(0).timeOfDay()).isEmpty();
     }
 
     @Test
@@ -60,6 +65,7 @@ class ProductivityCsvParserTest {
         List<ImportActivity> activities = parse("Зарядка,,Привычка,1");
 
         assertThat(activities.get(0).name()).isEqualTo("Зарядка");
+        assertThat(activities.get(0).timeOfDay()).isEmpty();
     }
 
     @Test
@@ -74,6 +80,67 @@ class ProductivityCsvParserTest {
         List<ImportActivity> activities = parse("Зарядка,,Привычка,0,,1");
 
         assertThat(activities.get(0).dailyValues()).containsOnlyKeys(3);
+    }
+
+    @Test
+    void morningVariantBecomesTimeOfDay() {
+        List<ImportActivity> activities = parse("Витамины,Утром,Привычка,1");
+
+        assertThat(activities.get(0).name()).isEqualTo("Витамины");
+        assertThat(activities.get(0).timeOfDay()).containsExactly(TimeOfDay.MORNING);
+    }
+
+    @Test
+    void dayAndEveningVariantsBecomeTimeOfDay() {
+        List<ImportActivity> activities = parse(
+                "Прогулка,Днём,Привычка,1",
+                ",Вечером,Привычка,1");
+
+        assertThat(activities).hasSize(1);
+        assertThat(activities.get(0).timeOfDay()).containsExactlyInAnyOrder(TimeOfDay.DAY, TimeOfDay.EVENING);
+    }
+
+    @Test
+    void recognizesVariantsWithoutCaseAndSpaces() {
+        List<ImportActivity> activities = parse("Прогулка,ВЕЧЕРОМ,Привычка,1",
+                "Чтение,\u00a0EVENING\u00a0,Привычка,1");
+
+        assertThat(activities).extracting(ImportActivity::timeOfDay)
+                .containsExactly(SetOf.evening(), SetOf.evening());
+    }
+
+    @Test
+    void groupsRowsOfSameActivityWithDifferentVariants() {
+        List<ImportActivity> activities = parse(
+                "Чистил зубы,Утром,Привычка,1",
+                ",Вечером,Привычка,1",
+                "Зарядка,,Привычка,1");
+
+        assertThat(activities).extracting(ImportActivity::name).containsExactly("Чистил зубы", "Зарядка");
+        assertThat(activities.get(0).lines()).hasSize(2);
+    }
+
+    @Test
+    void doesNotGroupSameNameOfDifferentTypes() {
+        List<ImportActivity> activities = parse(
+                "Чтение,Утром,Привычка,1",
+                "Чтение,Вечером,Задача,1");
+
+        assertThat(activities).hasSize(2);
+        assertThat(activities).extracting(ImportActivity::type)
+                .containsExactly(ActivityType.HABIT, ActivityType.TASK);
+    }
+
+    @Test
+    void keepsRowsWithoutVariantForActivityWithTimeOfDay() {
+        List<ImportActivity> activities = parse(
+                "Чистил зубы,Утром,Привычка,1",
+                "Чистил зубы,,Привычка,1");
+
+        assertThat(activities).hasSize(1);
+        assertThat(activities.get(0).timeOfDay()).containsExactly(TimeOfDay.MORNING);
+        assertThat(activities.get(0).lines()).extracting(ImportActivityLine::timeOfDay)
+                .containsExactly(TimeOfDay.MORNING, null);
     }
 
     @Test
@@ -101,11 +168,21 @@ class ProductivityCsvParserTest {
         assertThat(activities).isNotEmpty();
         assertThat(activities).extracting(ImportActivity::type)
                 .contains(ActivityType.HABIT, ActivityType.TASK);
-        assertThat(activities).extracting(ImportActivity::name)
-                .contains("Чистил зубы (Утром)", "Чистил зубы (Вечером)");
+        ImportActivity teeth = activities.stream()
+                .filter(activity -> activity.name().equals("Чистил зубы"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(teeth.timeOfDay()).containsExactlyInAnyOrder(TimeOfDay.MORNING, TimeOfDay.EVENING);
     }
 
     private List<ImportActivity> parse(String... lines) {
         return parser.parse(new StringReader(String.join("\n", lines)));
+    }
+
+    private static final class SetOf {
+
+        private static java.util.Set<TimeOfDay> evening() {
+            return java.util.Set.of(TimeOfDay.EVENING);
+        }
     }
 }

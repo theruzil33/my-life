@@ -15,5 +15,21 @@ public interface HabitCompletionRepository extends JpaRepository<HabitCompletion
 
     void deleteByHabitIdAndCompletedOn(Long habitId, LocalDate completedOn);
 
+    boolean existsByHabitIdAndCompletedOnAndTimeOfDayValue(Long habitId, LocalDate completedOn, String timeOfDayValue);
+
+    void deleteByHabitIdAndCompletedOnAndTimeOfDayValue(Long habitId, LocalDate completedOn, String timeOfDayValue);
+
+    default boolean existsByHabitIdAndCompletedOnAndTimeOfDay(Long habitId, LocalDate completedOn,
+            TimeOfDay timeOfDay) {
+        return existsByHabitIdAndCompletedOnAndTimeOfDayValue(habitId, completedOn,
+                HabitCompletion.storageValue(timeOfDay));
+    }
+
+    default void deleteByHabitIdAndCompletedOnAndTimeOfDay(Long habitId, LocalDate completedOn,
+            TimeOfDay timeOfDay) {
+        deleteByHabitIdAndCompletedOnAndTimeOfDayValue(habitId, completedOn,
+                HabitCompletion.storageValue(timeOfDay));
+    }
+
     List<HabitCompletion> findByHabitIdInAndCompletedOnBetween(Collection<Long> habitIds, LocalDate from, LocalDate to);
 }

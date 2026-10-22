@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -15,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,7 +27,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.theruzil.tracker.habit.ActivityType;
 import com.theruzil.tracker.habit.HabitService;
+import com.theruzil.tracker.habit.TimeOfDay;
 import com.theruzil.tracker.habit.dto.ImportedActivityResult;
+import com.theruzil.tracker.habit.dto.ImportedCompletion;
 import com.theruzil.tracker.importing.dto.ImportResultResponse;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,7 +52,7 @@ class ImportServiceTest {
     @Test
     void createsMissingActivityAndSavesCompletions() {
         when(habitService.importActivity(eq(USER_ID), eq(ActivityType.TASK), eq("Продукты"),
-                eq(LocalDate.of(2026, 5, 1)), anyCollection()))
+                eq(LocalDate.of(2026, 5, 1)), anySet(), anyCollection()))
                 .thenReturn(new ImportedActivityResult(true, 2));
 
         ImportResultResponse result = importService.importCsv(USER_ID, YEAR, MONTH,
@@ -62,7 +66,7 @@ class ImportServiceTest {
     @Test
     void reusesExistingActivityWithoutCreatingDuplicate() {
         when(habitService.importActivity(eq(USER_ID), eq(ActivityType.HABIT), eq("Зарядка"),
-                eq(LocalDate.of(2026, 5, 1)), anyCollection()))
+                eq(LocalDate.of(2026, 5, 1)), anySet(), anyCollection()))
                 .thenReturn(new ImportedActivityResult(false, 1));
 
         ImportResultResponse result = importService.importCsv(USER_ID, YEAR, MONTH,
@@ -72,9 +76,53 @@ class ImportServiceTest {
         assertThat(result.savedCompletions()).isEqualTo(1);
     }
 
+
+    @Test
+    void passesTimeOfDayVariantsToServiceAsOneActivity() {
+        when(habitService.importActivity(eq(USER_ID), eq(ActivityType.HABIT), eq("Чистил зубы"),
+                eq(LocalDate.of(2026, 5, 1)), anySet(), anyCollection()))
+                .thenReturn(new ImportedActivityResult(true, 2));
+
+        ImportResultResponse result = importService.importCsv(USER_ID, YEAR, MONTH,
+                csv(activity("Чистил зубы", "Утром", "Привычка", "1"),
+                        activity("", "Вечером", "Привычка", "1")));
+
+        assertThat(result.createdActivities()).isEqualTo(1);
+        assertThat(capturedTimeOfDay()).containsExactlyInAnyOrder(TimeOfDay.MORNING, TimeOfDay.EVENING);
+        assertThat(capturedCompletions()).extracting(ImportedCompletion::timeOfDay)
+                .containsExactlyInAnyOrder(TimeOfDay.MORNING, TimeOfDay.EVENING);
+    }
+
+    @Test
+    void skipsRowWithoutVariantWhenActivityHasTimeOfDay() {
+        when(habitService.importActivity(eq(USER_ID), eq(ActivityType.HABIT), eq("Чистил зубы"),
+                eq(LocalDate.of(2026, 5, 1)), anySet(), anyCollection()))
+                .thenReturn(new ImportedActivityResult(true, 2));
+
+        importService.importCsv(USER_ID, YEAR, MONTH,
+                csv(activity("Чистил зубы", "Утром", "Привычка", "1"),
+                        activity("Чистил зубы", "Вечером", "Привычка", "1"),
+                        activity("Чистил зубы", "", "Привычка", "1")));
+
+        assertThat(capturedCompletions()).extracting(ImportedCompletion::timeOfDay)
+                .containsExactlyInAnyOrder(TimeOfDay.MORNING, TimeOfDay.EVENING);
+    }
+
+    @Test
+    void keepsSharedCompletionForActivityWithoutTimeOfDay() {
+        when(habitService.importActivity(eq(USER_ID), eq(ActivityType.HABIT), eq("Зарядка"),
+                eq(LocalDate.of(2026, 5, 1)), anySet(), anyCollection()))
+                .thenReturn(new ImportedActivityResult(true, 1));
+
+        importService.importCsv(USER_ID, YEAR, MONTH, csv(activity("Зарядка", "", "Привычка", "1")));
+
+        assertThat(capturedTimeOfDay()).isEmpty();
+        assertThat(capturedCompletions()).extracting(ImportedCompletion::timeOfDay).containsExactly((TimeOfDay) null);
+    }
+
     @Test
     void importsDistinctActivitiesSeparately() {
-        when(habitService.importActivity(any(), any(), any(), any(), anyCollection()))
+        when(habitService.importActivity(any(), any(), any(), any(), anySet(), anyCollection()))
                 .thenReturn(new ImportedActivityResult(true, 0));
 
         ImportResultResponse result = importService.importCsv(USER_ID, YEAR, MONTH,
@@ -86,7 +134,7 @@ class ImportServiceTest {
 
     @Test
     void passesOnlyPositiveDaysToService() {
-        when(habitService.importActivity(any(), any(), any(), any(), anyCollection()))
+        when(habitService.importActivity(any(), any(), any(), any(), anySet(), anyCollection()))
                 .thenReturn(new ImportedActivityResult(true, 1));
 
         importService.importCsv(USER_ID, YEAR, MONTH, csv(activity("Зарядка", "", "Привычка", "0", "", "1")));
@@ -96,7 +144,7 @@ class ImportServiceTest {
 
     @Test
     void ignoresDaysBeyondMonthLength() {
-        when(habitService.importActivity(any(), any(), any(), any(), anyCollection()))
+        when(habitService.importActivity(any(), any(), any(), any(), anySet(), anyCollection()))
                 .thenReturn(new ImportedActivityResult(true, 1));
         String[] days = new String[29];
         java.util.Arrays.fill(days, "");
@@ -110,14 +158,14 @@ class ImportServiceTest {
 
     @Test
     void propagatesErrorFromService() {
-        when(habitService.importActivity(any(), any(), any(), any(), anyCollection()))
+        when(habitService.importActivity(any(), any(), any(), any(), anySet(), anyCollection()))
                 .thenThrow(new IllegalStateException("boom"));
 
         assertThatThrownBy(() -> importService.importCsv(USER_ID, YEAR, MONTH,
                 csv(activity("Зарядка", "", "Привычка", "1"))))
                 .isInstanceOf(IllegalStateException.class);
 
-        verify(habitService).importActivity(any(), any(), any(), any(), anyCollection());
+        verify(habitService).importActivity(any(), any(), any(), any(), anySet(), anyCollection());
     }
 
     @Test
@@ -150,9 +198,21 @@ class ImportServiceTest {
 
     @SuppressWarnings("unchecked")
     private List<LocalDate> capturedDates() {
-        ArgumentCaptor<Collection<LocalDate>> captor = ArgumentCaptor.forClass(Collection.class);
-        verify(habitService).importActivity(any(), any(), any(), any(), captor.capture());
+        return capturedCompletions().stream().map(ImportedCompletion::date).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ImportedCompletion> capturedCompletions() {
+        ArgumentCaptor<Collection<ImportedCompletion>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(habitService).importActivity(any(), any(), any(), any(), anySet(), captor.capture());
         return List.copyOf(captor.getValue());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<TimeOfDay> capturedTimeOfDay() {
+        ArgumentCaptor<Set<TimeOfDay>> captor = ArgumentCaptor.forClass(Set.class);
+        verify(habitService).importActivity(any(), any(), any(), any(), captor.capture(), anyCollection());
+        return captor.getValue();
     }
 
     private static InputStream csv(String... lines) {

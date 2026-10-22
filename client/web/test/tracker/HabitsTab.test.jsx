@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import HabitsTab from '../../src/tracker/HabitsTab'
 import { ApiError, NETWORK_ERROR_MESSAGE } from '../../src/api/client'
@@ -204,6 +204,237 @@ describe('HabitsTab', () => {
     expect(screen.queryByRole('checkbox', { name: 'Понедельник' })).not.toBeInTheDocument()
   })
 
+
+  it('показывает отдельные чекбоксы для частей дня', async () => {
+    trackerApi.listOnDate.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Чистил зубы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+        date: TODAY,
+        completed: false,
+        timeOfDay: ['MORNING', 'EVENING'],
+        completions: [
+          { timeOfDay: 'MORNING', completed: true },
+          { timeOfDay: 'EVENING', completed: false },
+        ],
+      },
+    ])
+    render(<HabitsTab />)
+
+    expect(await screen.findByRole('checkbox', { name: 'Чистил зубы — Утро' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Чистил зубы — Вечер' })).not.toBeChecked()
+    expect(screen.getByText('Чистил зубы')).toBeInTheDocument()
+  })
+
+  it('отмечает отдельную часть дня', async () => {
+    const user = userEvent.setup()
+    const activity = {
+      id: 7,
+      name: 'Чистил зубы',
+      startDate: '2026-09-01',
+      frequency: 'DAILY',
+      weekdays: [],
+      type: 'HABIT',
+      date: TODAY,
+      completed: false,
+      timeOfDay: ['MORNING', 'EVENING'],
+      completions: [
+        { timeOfDay: 'MORNING', completed: true },
+        { timeOfDay: 'EVENING', completed: false },
+      ],
+    }
+    trackerApi.listOnDate.mockResolvedValue([activity])
+    trackerApi.markCompleted.mockResolvedValue({
+      ...activity,
+      completed: true,
+      completions: [
+        { timeOfDay: 'MORNING', completed: true },
+        { timeOfDay: 'EVENING', completed: true },
+      ],
+    })
+    render(<HabitsTab />)
+
+    const evening = await screen.findByRole('checkbox', { name: 'Чистил зубы — Вечер' })
+    await user.click(evening)
+
+    await waitFor(() => expect(evening).toBeChecked())
+    expect(trackerApi.markCompleted).toHaveBeenCalledWith('token', 7, TODAY, 'EVENING')
+    expect(screen.getByRole('checkbox', { name: 'Чистил зубы — Утро' })).toBeChecked()
+  })
+
+  it('создаёт активность с частями дня', async () => {
+    const user = userEvent.setup()
+    render(<HabitsTab />)
+    await screen.findByText('Зарядка')
+
+    await openModal(user)
+    await user.type(screen.getByLabelText('Название'), 'Чистил зубы')
+    await user.click(screen.getByRole('checkbox', { name: 'Утро' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Вечер' }))
+    await user.click(screen.getByRole('button', { name: 'Создать' }))
+
+    await waitFor(() =>
+      expect(trackerApi.create).toHaveBeenCalledWith('token', {
+        name: 'Чистил зубы',
+        startDate: TODAY,
+        frequency: 'DAILY',
+        weekdays: [],
+        timeOfDay: ['MORNING', 'EVENING'],
+        type: 'HABIT',
+      }),
+    )
+  })
+
+  it('изменяет части дня у существующей активности', async () => {
+    const user = userEvent.setup()
+    trackerApi.listOnDate.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Чистил зубы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+        date: TODAY,
+        completed: true,
+        timeOfDay: ['MORNING', 'EVENING'],
+        completions: [
+          { timeOfDay: 'MORNING', completed: true },
+          { timeOfDay: 'EVENING', completed: true },
+        ],
+      },
+    ])
+    trackerApi.update.mockResolvedValue({ id: 7 })
+    render(<HabitsTab />)
+    await screen.findByText('Чистил зубы')
+
+    await user.click(screen.getByRole('button', { name: 'Время суток Чистил зубы' }))
+    const dialog = screen.getByRole('dialog')
+    expect(screen.getByRole('checkbox', { name: 'Утро' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Вечер' })).toBeChecked()
+    await user.click(screen.getByRole('checkbox', { name: 'Вечер' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() =>
+      expect(trackerApi.update).toHaveBeenCalledWith('token', 7, {
+        name: 'Чистил зубы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        timeOfDay: ['MORNING'],
+        type: 'HABIT',
+      }),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: 'Чистил зубы — Вечер' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Чистил зубы — Утро' })).toBeChecked()
+  })
+
+  it('очищает набор частей дня', async () => {
+    const user = userEvent.setup()
+    trackerApi.listOnDate.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Чистил зубы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+        date: TODAY,
+        completed: true,
+        timeOfDay: ['MORNING'],
+        completions: [{ timeOfDay: 'MORNING', completed: true }],
+      },
+    ])
+    trackerApi.update.mockResolvedValue({ id: 7 })
+    render(<HabitsTab />)
+    await screen.findByText('Чистил зубы')
+
+    await user.click(screen.getByRole('button', { name: 'Время суток Чистил зубы' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(screen.getByRole('checkbox', { name: 'Утро' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() =>
+      expect(trackerApi.update).toHaveBeenCalledWith('token', 7, expect.objectContaining({ timeOfDay: [] })),
+    )
+    expect(await screen.findByRole('checkbox', { name: 'Чистил зубы' })).not.toBeChecked()
+  })
+
+  it('отменяет изменение частей дня', async () => {
+    const user = userEvent.setup()
+    trackerApi.listOnDate.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Чистил зубы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+        date: TODAY,
+        completed: false,
+        timeOfDay: ['MORNING'],
+        completions: [{ timeOfDay: 'MORNING', completed: false }],
+      },
+    ])
+    render(<HabitsTab />)
+    await screen.findByText('Чистил зубы')
+
+    await user.click(screen.getByRole('button', { name: 'Время суток Чистил зубы' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(screen.getByRole('checkbox', { name: 'Вечер' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trackerApi.update).not.toHaveBeenCalled()
+    expect(screen.getByRole('checkbox', { name: 'Чистил зубы — Утро' })).toBeInTheDocument()
+  })
+
+  it('переименование сохраняет части дня', async () => {
+    const user = userEvent.setup()
+    trackerApi.listOnDate.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Чистил зубы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+        date: TODAY,
+        completed: false,
+        timeOfDay: ['MORNING', 'EVENING'],
+        completions: [
+          { timeOfDay: 'MORNING', completed: false },
+          { timeOfDay: 'EVENING', completed: false },
+        ],
+      },
+    ])
+    trackerApi.update.mockResolvedValue({ id: 7, name: 'Чистка зубов' })
+    render(<HabitsTab />)
+    await screen.findByText('Чистил зубы')
+
+    await openRename(user, 'Чистил зубы')
+    await user.clear(screen.getByLabelText('Название'))
+    await user.type(screen.getByLabelText('Название'), 'Чистка зубов')
+    await user.click(screen.getByRole('button', { name: 'Переименовать' }))
+
+    await waitFor(() =>
+      expect(trackerApi.update).toHaveBeenCalledWith('token', 7, {
+        name: 'Чистка зубов',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        timeOfDay: ['MORNING', 'EVENING'],
+        type: 'HABIT',
+      }),
+    )
+  })
+
   it('отклоняет создание без названия', async () => {
     const user = userEvent.setup()
     render(<HabitsTab />)
@@ -261,6 +492,7 @@ describe('HabitsTab', () => {
         frequency: 'DAILY',
         weekdays: [],
         type: 'HABIT',
+        timeOfDay: [],
       }),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -285,6 +517,7 @@ describe('HabitsTab', () => {
         frequency: 'SPECIFIC_WEEKDAYS',
         weekdays: ['MONDAY'],
         type: 'HABIT',
+        timeOfDay: [],
       }),
     )
   })
@@ -306,6 +539,7 @@ describe('HabitsTab', () => {
         frequency: 'DAILY',
         weekdays: [],
         type: 'HABIT',
+        timeOfDay: [],
       }),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -332,6 +566,7 @@ describe('HabitsTab', () => {
         frequency: 'DAILY',
         weekdays: [],
         type: 'HABIT',
+        timeOfDay: [],
         markPastCompleted: true,
       }),
     )
@@ -392,6 +627,7 @@ describe('HabitsTab', () => {
         frequency: 'DAILY',
         weekdays: [],
         type: 'HABIT',
+        timeOfDay: [],
       }),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -411,6 +647,7 @@ describe('HabitsTab', () => {
         date: TODAY,
         completed: false,
         type: 'HABIT',
+        timeOfDay: [],
       },
     ])
     trackerApi.update.mockResolvedValue({ id: 3, name: 'Плавание' })
@@ -429,6 +666,7 @@ describe('HabitsTab', () => {
         frequency: 'SPECIFIC_WEEKDAYS',
         weekdays: ['MONDAY', 'WEDNESDAY'],
         type: 'HABIT',
+        timeOfDay: [],
       }),
     )
   })

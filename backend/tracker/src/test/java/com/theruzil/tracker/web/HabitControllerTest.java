@@ -31,6 +31,7 @@ import com.theruzil.tracker.habit.ActivityType;
 import com.theruzil.tracker.habit.Habit;
 import com.theruzil.tracker.habit.HabitFrequency;
 import com.theruzil.tracker.habit.HabitRepository;
+import com.theruzil.tracker.habit.TimeOfDay;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -470,9 +471,135 @@ class HabitControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+
+    @Test
+    void createsHabitWithTimeOfDay() throws Exception {
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Teeth\",\"startDate\":\"" + TODAY
+                        + "\",\"frequency\":\"DAILY\",\"type\":\"HABIT\","
+                        + "\"timeOfDay\":[\"MORNING\",\"EVENING\"]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.timeOfDay[0]").value("MORNING"))
+                .andExpect(jsonPath("$.timeOfDay[1]").value("EVENING"));
+    }
+
+    @Test
+    void rejectsDuplicateTimeOfDay() throws Exception {
+        mockMvc.perform(post("/habits").header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Teeth\",\"startDate\":\"" + TODAY
+                        + "\",\"frequency\":\"DAILY\",\"type\":\"HABIT\","
+                        + "\"timeOfDay\":[\"MORNING\",\"MORNING\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void updatesTimeOfDay() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(put("/habits/" + habit.getId()).header(UserIdFilter.USER_ID_HEADER, userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Teeth\",\"startDate\":\"" + TODAY
+                        + "\",\"frequency\":\"DAILY\",\"type\":\"HABIT\","
+                        + "\"timeOfDay\":[\"MORNING\",\"EVENING\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.timeOfDay[0]").value("MORNING"))
+                .andExpect(jsonPath("$.timeOfDay[1]").value("EVENING"));
+    }
+
+    @Test
+    void listsCompletionStatusForEachTimeOfDay() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+
+        mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
+                .param("timeOfDay", "MORNING")
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completed").value(false))
+                .andExpect(jsonPath("$.completions[0].timeOfDay").value("MORNING"))
+                .andExpect(jsonPath("$.completions[0].completed").value(true))
+                .andExpect(jsonPath("$.completions[1].timeOfDay").value("EVENING"))
+                .andExpect(jsonPath("$.completions[1].completed").value(false));
+
+        mockMvc.perform(get("/habits").header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].timeOfDay[0]").value("MORNING"))
+                .andExpect(jsonPath("$[0].completions[0].completed").value(true))
+                .andExpect(jsonPath("$[0].completions[1].completed").value(false));
+    }
+
+    @Test
+    void unmarksSingleTimeOfDay() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+
+        mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
+                .param("timeOfDay", "MORNING")
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/habits/" + habit.getId() + "/completions/" + TODAY)
+                .param("timeOfDay", "MORNING")
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completions[0].completed").value(false))
+                .andExpect(jsonPath("$.completions[1].completed").value(false));
+    }
+
+    @Test
+    void rejectsMarkWithoutTimeOfDayForActivityWithTimeOfDay() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING));
+
+        mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void rejectsTimeOfDayForActivityWithoutTimeOfDay() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of());
+
+        mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
+                .param("timeOfDay", "MORNING")
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void historyReturnsEntriesForEachTimeOfDay() throws Exception {
+        Habit habit = seedHabit(userId, ActivityType.HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+        mockMvc.perform(put("/habits/" + habit.getId() + "/completions/" + TODAY)
+                .param("timeOfDay", "MORNING")
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits/history").param("from", TODAY_VALUE).param("to", TODAY_VALUE)
+                .header(UserIdFilter.USER_ID_HEADER, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].timeOfDay[0]").value("MORNING"))
+                .andExpect(jsonPath("$[0].days.length()").value(2))
+                .andExpect(jsonPath("$[0].days[0].timeOfDay").value("MORNING"))
+                .andExpect(jsonPath("$[0].days[0].completed").value(true))
+                .andExpect(jsonPath("$[0].days[1].timeOfDay").value("EVENING"))
+                .andExpect(jsonPath("$[0].days[1].completed").value(false));
+    }
+
     private Habit seedHabit(Long ownerId, ActivityType type, String name, LocalDate startDate,
             HabitFrequency frequency, Set<DayOfWeek> weekdays) {
-        return habitRepository.saveAndFlush(new Habit(ownerId, type, name, startDate, frequency, weekdays, NOW));
+        return seedHabit(ownerId, type, name, startDate, frequency, weekdays, Set.of());
+    }
+
+    private Habit seedHabit(Long ownerId, ActivityType type, String name, LocalDate startDate,
+            HabitFrequency frequency, Set<DayOfWeek> weekdays, Set<TimeOfDay> timeOfDay) {
+        return habitRepository.saveAndFlush(
+                new Habit(ownerId, type, name, startDate, frequency, weekdays, timeOfDay, NOW));
     }
 
     private String habitBody(String name, LocalDate startDate, String frequency, String type) {

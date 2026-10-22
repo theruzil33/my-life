@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.theruzil.tracker.habit.HabitService;
 import com.theruzil.tracker.habit.dto.ImportedActivityResult;
+import com.theruzil.tracker.habit.dto.ImportedCompletion;
 import com.theruzil.tracker.importing.dto.ImportResultResponse;
 
 @Service
@@ -55,15 +57,28 @@ public class ImportService {
         int createdActivities = 0;
         int savedCompletions = 0;
         for (ImportActivity activity : activities) {
-            Set<LocalDate> dates = completionDates(activity.dailyValues(), yearMonth, monthLength);
+            List<ImportedCompletion> completions = completions(activity, yearMonth, monthLength);
             ImportedActivityResult result = habitService.importActivity(userId, activity.type(), activity.name(),
-                    yearMonth.atDay(1), dates);
+                    yearMonth.atDay(1), activity.timeOfDay(), completions);
             if (result.created()) {
                 createdActivities++;
             }
             savedCompletions += result.savedCompletions();
         }
         return new ImportResultResponse(createdActivities, savedCompletions);
+    }
+
+    private List<ImportedCompletion> completions(ImportActivity activity, YearMonth yearMonth, int monthLength) {
+        List<ImportedCompletion> completions = new ArrayList<>();
+        for (ImportActivityLine line : activity.lines()) {
+            if (!activity.timeOfDay().isEmpty() && line.timeOfDay() == null) {
+                continue;
+            }
+            for (LocalDate date : completionDates(line.dailyValues(), yearMonth, monthLength)) {
+                completions.add(new ImportedCompletion(line.timeOfDay(), date));
+            }
+        }
+        return completions;
     }
 
     private Set<LocalDate> completionDates(Map<Integer, BigDecimal> dailyValues, YearMonth yearMonth, int monthLength) {

@@ -124,6 +124,43 @@ describe('StatisticsTab', () => {
     expect(screen.getByRole('table')).toBeInTheDocument()
   })
 
+
+  it('показывает отдельные строки для частей дня', async () => {
+    trackerApi.history.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Чистил зубы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'HABIT',
+        timeOfDay: ['MORNING', 'EVENING'],
+        days: [
+          { date: '2026-09-02', completed: true, timeOfDay: 'MORNING' },
+          { date: '2026-09-02', completed: false, timeOfDay: 'EVENING' },
+          { date: '2026-09-03', completed: false, timeOfDay: 'MORNING' },
+          { date: '2026-09-03', completed: true, timeOfDay: 'EVENING' },
+        ],
+      },
+    ])
+    render(<StatisticsTab />)
+
+    expect(
+      await screen.findByLabelText('Чистил зубы · Утро, 2026-09-02: выполнено'),
+    ).toHaveClass('stats-square-completed')
+    expect(screen.getByLabelText('Чистил зубы · Вечер, 2026-09-02: не выполнено')).toHaveClass(
+      'stats-square-scheduled',
+    )
+    expect(screen.getByLabelText('Чистил зубы · Утро, 2026-09-03: не выполнено')).toHaveClass(
+      'stats-square-scheduled',
+    )
+    expect(screen.getByLabelText('Чистил зубы · Вечер, 2026-09-03: выполнено')).toHaveClass(
+      'stats-square-completed',
+    )
+    expect(screen.getByRole('rowheader', { name: 'Чистил зубы · Утро' })).toBeInTheDocument()
+    expect(screen.getByRole('rowheader', { name: 'Чистил зубы · Вечер' })).toBeInTheDocument()
+  })
+
   it('разделяет привычки и задачи по группам в одной матрице', async () => {
     render(<StatisticsTab />)
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { todayIso } from './dates'
-import { FREQUENCY, FREQUENCY_OPTIONS, WEEKDAY_OPTIONS } from './habitOptions'
+import { FREQUENCY, FREQUENCY_OPTIONS, TIME_OF_DAY_OPTIONS, WEEKDAY_OPTIONS } from './habitOptions'
 import { hasValidationErrors, validateHabitForm } from './validation'
 
 export default function HabitFormModal({
@@ -14,6 +14,7 @@ export default function HabitFormModal({
   const [startDate, setStartDate] = useState(todayIso())
   const [frequency, setFrequency] = useState(FREQUENCY.DAILY)
   const [weekdays, setWeekdays] = useState([])
+  const [timeOfDay, setTimeOfDay] = useState([])
   const [markPastCompleted, setMarkPastCompleted] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState(null)
@@ -37,6 +38,12 @@ export default function HabitFormModal({
     )
   }
 
+  function toggleTimeOfDay(value) {
+    setTimeOfDay((current) =>
+      current.includes(value) ? current.filter((slot) => slot !== value) : [...current, value],
+    )
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     if (isSubmitting) {
@@ -57,6 +64,7 @@ export default function HabitFormModal({
         startDate,
         frequency,
         weekdays: frequency === FREQUENCY.SPECIFIC_WEEKDAYS ? weekdays : [],
+        timeOfDay,
         type,
       }
       if (markPastCompleted) {
@@ -160,6 +168,25 @@ export default function HabitFormModal({
               </div>
             </fieldset>
           )}
+
+          <fieldset className="auth-field tracker-fieldset">
+            <legend>Время суток</legend>
+            <div className="weekday-options">
+              {TIME_OF_DAY_OPTIONS.map((option) => (
+                <label key={option.value} className="weekday-option">
+                  <input
+                    type="checkbox"
+                    name="timeOfDay"
+                    value={option.value}
+                    checked={timeOfDay.includes(option.value)}
+                    disabled={isSubmitting}
+                    onChange={() => toggleTimeOfDay(option.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <div className="auth-field tracker-fieldset">
             <label className="checkbox-option" htmlFor="habit-mark-past">

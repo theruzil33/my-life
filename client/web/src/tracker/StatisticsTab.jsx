@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { trackerApi } from '../api/trackerApi'
 import { useAuth } from '../auth/AuthContext'
+import { TIME_OF_DAY_LABELS } from './habitOptions'
 import {
   eachIsoDate,
   firstDayOfMonthIso,
@@ -127,15 +128,30 @@ export default function StatisticsTab({ refreshToken = 0 }) {
 
   const columns = eachIsoDate(applied.from, applied.to)
 
+  function rowsForRecord(record) {
+    const timeOfDay = record.timeOfDay ?? []
+    if (timeOfDay.length === 0) {
+      return [{ key: String(record.id), record, timeOfDay: null, label: record.name }]
+    }
+    return timeOfDay.map((slot) => ({
+      key: `${record.id}:${slot}`,
+      record,
+      timeOfDay: slot,
+      label: `${record.name} · ${TIME_OF_DAY_LABELS[slot] ?? slot}`,
+    }))
+  }
+
   const groups = [
     { type: 'HABIT', label: 'Привычки' },
     { type: 'TASK', label: 'Задачи' },
   ]
     .map((group) => ({
       ...group,
-      records: (records ?? []).filter((record) => (record.type ?? 'HABIT') === group.type),
+      rows: (records ?? [])
+        .filter((record) => (record.type ?? 'HABIT') === group.type)
+        .flatMap(rowsForRecord),
     }))
-    .filter((group) => group.records.length > 0)
+    .filter((group) => group.rows.length > 0)
 
   return (
     <div className="stats-tab">
@@ -224,15 +240,18 @@ export default function StatisticsTab({ refreshToken = 0 }) {
                         {group.label}
                       </th>
                     </tr>
-                    {group.records.map((record) => {
-                      const scheduled = new Set(record.days.map((day) => day.date))
+                    {group.rows.map((row) => {
+                      const days = row.record.days.filter((day) =>
+                        row.timeOfDay === null ? day.timeOfDay == null : day.timeOfDay === row.timeOfDay,
+                      )
+                      const scheduled = new Set(days.map((day) => day.date))
                       const completed = new Set(
-                        record.days.filter((day) => day.completed).map((day) => day.date),
+                        days.filter((day) => day.completed).map((day) => day.date),
                       )
                       return (
-                        <tr key={record.id}>
+                        <tr key={row.key}>
                           <th scope="row" className="stats-habit-name">
-                            {record.name}
+                            {row.label}
                           </th>
                           {columns.map((date) => {
                             const status = completed.has(date)
@@ -245,7 +264,7 @@ export default function StatisticsTab({ refreshToken = 0 }) {
                                 <span
                                   className={`stats-square stats-square-${status}`}
                                   title={`${date}: ${STATUS_LABELS[status]}`}
-                                  aria-label={`${record.name}, ${date}: ${STATUS_LABELS[status]}`}
+                                  aria-label={`${row.label}, ${date}: ${STATUS_LABELS[status]}`}
                                   role="img"
                                 />
                               </td>

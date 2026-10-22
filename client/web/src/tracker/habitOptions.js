@@ -22,3 +22,19 @@ export const WEEKDAY_OPTIONS = [
   { value: 'SATURDAY', label: 'Сб', fullLabel: 'Суббота', isoDay: 6 },
   { value: 'SUNDAY', label: 'Вс', fullLabel: 'Воскресенье', isoDay: 7 },
 ]
+
+export const TIME_OF_DAY = {
+  MORNING: 'MORNING',
+  DAY: 'DAY',
+  EVENING: 'EVENING',
+}
+
+export const TIME_OF_DAY_OPTIONS = [
+  { value: TIME_OF_DAY.MORNING, label: 'Утро' },
+  { value: TIME_OF_DAY.DAY, label: 'День' },
+  { value: TIME_OF_DAY.EVENING, label: 'Вечер' },
+]
+
+export const TIME_OF_DAY_LABELS = Object.fromEntries(
+  TIME_OF_DAY_OPTIONS.map((option) => [option.value, option.label]),
+)

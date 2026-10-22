@@ -95,6 +95,7 @@ describe('TasksTab', () => {
         frequency: 'DAILY',
         weekdays: [],
         type: 'TASK',
+        timeOfDay: [],
       }),
     )
   })
@@ -118,7 +119,55 @@ describe('TasksTab', () => {
         frequency: 'DAILY',
         weekdays: [],
         type: 'TASK',
+        timeOfDay: [],
         markPastCompleted: true,
+      }),
+    )
+  })
+
+
+  it('показывает отдельные чекбоксы для частей дня задачи', async () => {
+    trackerApi.listOnDate.mockResolvedValue([
+      {
+        id: 8,
+        name: 'Полить цветы',
+        startDate: '2026-09-01',
+        frequency: 'DAILY',
+        weekdays: [],
+        type: 'TASK',
+        date: TODAY,
+        completed: false,
+        timeOfDay: ['MORNING', 'EVENING'],
+        completions: [
+          { timeOfDay: 'MORNING', completed: false },
+          { timeOfDay: 'EVENING', completed: true },
+        ],
+      },
+    ])
+    render(<TasksTab />)
+
+    expect(await screen.findByRole('checkbox', { name: 'Полить цветы — Утро' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Полить цветы — Вечер' })).toBeChecked()
+  })
+
+  it('создаёт задачу с частями дня', async () => {
+    const user = userEvent.setup()
+    render(<TasksTab />)
+    await screen.findByText('Прочитать главу')
+
+    await user.click(screen.getByRole('button', { name: 'Добавить задачу' }))
+    await user.type(screen.getByLabelText('Название'), 'Полить цветы')
+    await user.click(screen.getByRole('checkbox', { name: 'День' }))
+    await user.click(screen.getByRole('button', { name: 'Создать' }))
+
+    await waitFor(() =>
+      expect(trackerApi.create).toHaveBeenCalledWith('token', {
+        name: 'Полить цветы',
+        startDate: TODAY,
+        frequency: 'DAILY',
+        weekdays: [],
+        timeOfDay: ['DAY'],
+        type: 'TASK',
       }),
     )
   })
@@ -154,6 +203,7 @@ describe('TasksTab', () => {
         frequency: 'DAILY',
         weekdays: [],
         type: 'TASK',
+        timeOfDay: [],
       }),
     )
     await waitFor(() => expect(screen.getByText('Прочитать две главы')).toBeInTheDocument())

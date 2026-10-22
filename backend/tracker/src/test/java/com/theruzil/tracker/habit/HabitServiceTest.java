@@ -15,6 +15,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -33,6 +34,8 @@ import com.theruzil.tracker.habit.dto.HabitOnDateResponse;
 import com.theruzil.tracker.habit.dto.HabitRequest;
 import com.theruzil.tracker.habit.dto.HabitResponse;
 import com.theruzil.tracker.habit.dto.ImportedActivityResult;
+import com.theruzil.tracker.habit.dto.ImportedCompletion;
+import com.theruzil.tracker.habit.dto.TimeOfDayCompletion;
 
 @ExtendWith(MockitoExtension.class)
 class HabitServiceTest {
@@ -479,7 +482,7 @@ class HabitServiceTest {
         Habit habit = habitWithId(1L, USER_ID, HABIT, "daily", TODAY, HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
 
-        HabitOnDateResponse response = habitService.markCompleted(USER_ID, 1L, TODAY);
+        HabitOnDateResponse response = habitService.markCompleted(USER_ID, 1L, TODAY, null);
 
         assertThat(response.completed()).isTrue();
         assertThat(response.date()).isEqualTo(TODAY);
@@ -492,7 +495,7 @@ class HabitServiceTest {
         Habit habit = habitWithId(1L, USER_ID, HABIT, "daily", TODAY.minusDays(10), HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
 
-        habitService.markCompleted(USER_ID, 1L, past);
+        habitService.markCompleted(USER_ID, 1L, past, null);
 
         verify(completionRepository).save(any(HabitCompletion.class));
     }
@@ -501,9 +504,9 @@ class HabitServiceTest {
     void repeatedMarkDoesNotCreateDuplicate() {
         Habit habit = habitWithId(1L, USER_ID, HABIT, "daily", TODAY, HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
-        when(completionRepository.existsByHabitIdAndCompletedOn(1L, TODAY)).thenReturn(true);
+        when(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(1L, TODAY, null)).thenReturn(true);
 
-        HabitOnDateResponse response = habitService.markCompleted(USER_ID, 1L, TODAY);
+        HabitOnDateResponse response = habitService.markCompleted(USER_ID, 1L, TODAY, null);
 
         assertThat(response.completed()).isTrue();
         verify(completionRepository, never()).save(any(HabitCompletion.class));
@@ -514,7 +517,7 @@ class HabitServiceTest {
         Habit habit = habitWithId(1L, USER_ID, HABIT, "daily", TODAY, HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
 
-        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY.plusDays(1)))
+        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY.plusDays(1), null))
                 .isInstanceOf(InvalidHabitDataException.class);
 
         verify(completionRepository, never()).save(any(HabitCompletion.class));
@@ -525,7 +528,7 @@ class HabitServiceTest {
         Habit habit = habitWithId(1L, USER_ID, HABIT, "daily", TODAY.minusDays(1), HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
 
-        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY.minusDays(2)))
+        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY.minusDays(2), null))
                 .isInstanceOf(InvalidHabitDataException.class);
     }
 
@@ -535,7 +538,7 @@ class HabitServiceTest {
                 HabitFrequency.SPECIFIC_WEEKDAYS, Set.of(TODAY.getDayOfWeek().plus(1)));
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
 
-        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY))
+        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY, null))
                 .isInstanceOf(InvalidHabitDataException.class);
     }
 
@@ -544,10 +547,10 @@ class HabitServiceTest {
         Habit habit = habitWithId(1L, USER_ID, HABIT, "daily", TODAY, HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
 
-        HabitOnDateResponse response = habitService.unmarkCompleted(USER_ID, 1L, TODAY);
+        HabitOnDateResponse response = habitService.unmarkCompleted(USER_ID, 1L, TODAY, null);
 
         assertThat(response.completed()).isFalse();
-        verify(completionRepository).deleteByHabitIdAndCompletedOn(1L, TODAY);
+        verify(completionRepository).deleteByHabitIdAndCompletedOnAndTimeOfDay(1L, TODAY, null);
     }
 
     @Test
@@ -555,17 +558,17 @@ class HabitServiceTest {
         Habit habit = habitWithId(1L, USER_ID, HABIT, "daily", TODAY.minusDays(5), HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
 
-        HabitOnDateResponse response = habitService.unmarkCompleted(USER_ID, 1L, TODAY.minusDays(1));
+        HabitOnDateResponse response = habitService.unmarkCompleted(USER_ID, 1L, TODAY.minusDays(1), null);
 
         assertThat(response.completed()).isFalse();
-        verify(completionRepository).deleteByHabitIdAndCompletedOn(1L, TODAY.minusDays(1));
+        verify(completionRepository).deleteByHabitIdAndCompletedOnAndTimeOfDay(1L, TODAY.minusDays(1), null);
     }
 
     @Test
     void rejectsCompletionOfForeignHabit() {
         when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY))
+        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY, null))
                 .isInstanceOf(HabitNotFoundException.class);
     }
 
@@ -577,10 +580,12 @@ class HabitServiceTest {
             setId(saved, 1L);
             return saved;
         });
-        when(completionRepository.existsByHabitIdAndCompletedOn(eq(1L), any(LocalDate.class))).thenReturn(false);
+        when(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(eq(1L), any(LocalDate.class), any()))
+                .thenReturn(false);
 
         ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1),
-                List.of(LocalDate.of(2026, 5, 1), TODAY, TODAY.plusDays(1)));
+                Set.of(), List.of(imported(null, LocalDate.of(2026, 5, 1)), imported(null, TODAY),
+                        imported(null, TODAY.plusDays(1))));
 
         assertThat(result.created()).isTrue();
         assertThat(result.savedCompletions()).isEqualTo(2);
@@ -591,10 +596,11 @@ class HabitServiceTest {
     void importActivityReusesExistingActivity() {
         Habit habit = habitWithId(5L, USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1), HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "Habit")).thenReturn(List.of(habit));
-        when(completionRepository.existsByHabitIdAndCompletedOn(eq(5L), any(LocalDate.class))).thenReturn(false);
+        when(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(eq(5L), any(LocalDate.class), any()))
+                .thenReturn(false);
 
         ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1),
-                List.of(LocalDate.of(2026, 5, 1)));
+                Set.of(), List.of(imported(null, LocalDate.of(2026, 5, 1))));
 
         assertThat(result.created()).isFalse();
         assertThat(result.savedCompletions()).isEqualTo(1);
@@ -606,10 +612,11 @@ class HabitServiceTest {
         Habit habit = habitWithId(5L, USER_ID, HABIT, "weekly", LocalDate.of(2026, 5, 1),
                 HabitFrequency.SPECIFIC_WEEKDAYS, Set.of(DayOfWeek.MONDAY));
         when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "weekly")).thenReturn(List.of(habit));
-        when(completionRepository.existsByHabitIdAndCompletedOn(eq(5L), any(LocalDate.class))).thenReturn(false);
+        when(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(eq(5L), any(LocalDate.class), any()))
+                .thenReturn(false);
 
         ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "weekly", LocalDate.of(2026, 5, 1),
-                List.of(LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 4)));
+                Set.of(), List.of(imported(null, LocalDate.of(2026, 5, 1)), imported(null, LocalDate.of(2026, 5, 4))));
 
         assertThat(result.savedCompletions()).isEqualTo(1);
         assertThat(capturedSavedCompletions()).containsExactly(LocalDate.of(2026, 5, 4));
@@ -619,10 +626,11 @@ class HabitServiceTest {
     void importActivityDoesNotDuplicateExistingCompletion() {
         Habit habit = habitWithId(5L, USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1), HabitFrequency.DAILY, Set.of());
         when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "Habit")).thenReturn(List.of(habit));
-        when(completionRepository.existsByHabitIdAndCompletedOn(eq(5L), any(LocalDate.class))).thenReturn(true);
+        when(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(eq(5L), any(LocalDate.class), any()))
+                .thenReturn(true);
 
         ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Habit", LocalDate.of(2026, 5, 1),
-                List.of(LocalDate.of(2026, 5, 1)));
+                Set.of(), List.of(imported(null, LocalDate.of(2026, 5, 1))));
 
         assertThat(result.savedCompletions()).isZero();
         verify(completionRepository, never()).saveAll(any());
@@ -655,6 +663,13 @@ class HabitServiceTest {
     }
 
     @SuppressWarnings("unchecked")
+    private List<HabitCompletion> capturedCompletions() {
+        ArgumentCaptor<Iterable<HabitCompletion>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(completionRepository).saveAll(captor.capture());
+        return StreamSupport.stream(captor.getValue().spliterator(), false).toList();
+    }
+
+    @SuppressWarnings("unchecked")
     private List<LocalDate> capturedSavedCompletions() {
         ArgumentCaptor<Iterable<HabitCompletion>> captor = ArgumentCaptor.forClass(Iterable.class);
         verify(completionRepository).saveAll(captor.capture());
@@ -663,9 +678,270 @@ class HabitServiceTest {
                 .toList();
     }
 
+
+    @Test
+    void createsActivityWithTimeOfDay() {
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        HabitResponse response = habitService.create(USER_ID, new HabitRequest("Teeth", TODAY, HabitFrequency.DAILY,
+                null, HABIT, List.of(TimeOfDay.MORNING, TimeOfDay.EVENING)));
+
+        assertThat(response.timeOfDay()).containsExactly(TimeOfDay.MORNING, TimeOfDay.EVENING);
+    }
+
+    @Test
+    void createsActivityWithAllTimeOfDayValues() {
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        HabitResponse response = habitService.create(USER_ID, new HabitRequest("Teeth", TODAY, HabitFrequency.DAILY,
+                null, HABIT, List.of(TimeOfDay.EVENING, TimeOfDay.DAY, TimeOfDay.MORNING)));
+
+        assertThat(response.timeOfDay()).containsExactly(TimeOfDay.MORNING, TimeOfDay.DAY, TimeOfDay.EVENING);
+    }
+
+    @Test
+    void createsActivityWithoutTimeOfDay() {
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        HabitResponse response = habitService.create(USER_ID, new HabitRequest("Teeth", TODAY, HabitFrequency.DAILY,
+                null, HABIT, (List<TimeOfDay>) null));
+
+        assertThat(response.timeOfDay()).isEmpty();
+    }
+
+    @Test
+    void rejectsDuplicateTimeOfDay() {
+        assertThatThrownBy(() -> habitService.create(USER_ID, new HabitRequest("Teeth", TODAY, HabitFrequency.DAILY,
+                null, HABIT, List.of(TimeOfDay.MORNING, TimeOfDay.MORNING))))
+                .isInstanceOf(InvalidHabitDataException.class);
+
+        verifyNoInteractions(habitRepository);
+    }
+
+    @Test
+    void rejectsNullTimeOfDayValue() {
+        assertThatThrownBy(() -> habitService.create(USER_ID, new HabitRequest("Teeth", TODAY, HabitFrequency.DAILY,
+                null, HABIT, Arrays.asList(TimeOfDay.MORNING, null))))
+                .isInstanceOf(InvalidHabitDataException.class);
+
+        verifyNoInteractions(habitRepository);
+    }
+
+    @Test
+    void updatesTimeOfDayWithoutTouchingCompletions() {
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING));
+        when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        HabitResponse response = habitService.update(USER_ID, 1L, new HabitRequest("Teeth", TODAY,
+                HabitFrequency.DAILY, null, HABIT, List.of(TimeOfDay.MORNING, TimeOfDay.EVENING)));
+
+        assertThat(response.timeOfDay()).containsExactly(TimeOfDay.MORNING, TimeOfDay.EVENING);
+        verifyNoInteractions(completionRepository);
+    }
+
+    @Test
+    void listReturnsCompletionStatusForEachTimeOfDay() {
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", TODAY.minusDays(1), HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+        when(habitRepository.findScheduledOn(USER_ID, TODAY, TODAY.getDayOfWeek(), HabitFrequency.DAILY, null))
+                .thenReturn(List.of(habit));
+        when(completionRepository.findByHabitIdInAndCompletedOnBetween(Set.of(1L), TODAY, TODAY))
+                .thenReturn(List.of(new HabitCompletion(1L, TODAY, TimeOfDay.MORNING, NOW)));
+
+        HabitOnDateResponse response = habitService.listOnDate(USER_ID, TODAY, null).get(0);
+
+        assertThat(response.timeOfDay()).containsExactly(TimeOfDay.MORNING, TimeOfDay.EVENING);
+        assertThat(response.completions()).containsExactly(new TimeOfDayCompletion(TimeOfDay.MORNING, true),
+                new TimeOfDayCompletion(TimeOfDay.EVENING, false));
+        assertThat(response.completed()).isFalse();
+    }
+
+    @Test
+    void listMarksActivityCompletedWhenAllTimeOfDayCompleted() {
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+        when(habitRepository.findScheduledOn(USER_ID, TODAY, TODAY.getDayOfWeek(), HabitFrequency.DAILY, null))
+                .thenReturn(List.of(habit));
+        when(completionRepository.findByHabitIdInAndCompletedOnBetween(Set.of(1L), TODAY, TODAY))
+                .thenReturn(List.of(new HabitCompletion(1L, TODAY, TimeOfDay.MORNING, NOW),
+                        new HabitCompletion(1L, TODAY, TimeOfDay.EVENING, NOW)));
+
+        assertThat(habitService.listOnDate(USER_ID, TODAY, null).get(0).completed()).isTrue();
+    }
+
+    @Test
+    void historyReturnsEntriesForEachTimeOfDay() {
+        LocalDate from = TODAY.minusDays(1);
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", from, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+        when(habitRepository.findStartedBy(USER_ID, TODAY)).thenReturn(List.of(habit));
+        when(completionRepository.findByHabitIdInAndCompletedOnBetween(Set.of(1L), from, TODAY))
+                .thenReturn(List.of(new HabitCompletion(1L, from, TimeOfDay.MORNING, NOW)));
+
+        List<HabitHistoryEntry> days = habitService.history(USER_ID, from, TODAY).get(0).days();
+
+        assertThat(days).containsExactly(
+                new HabitHistoryEntry(from, true, TimeOfDay.MORNING),
+                new HabitHistoryEntry(from, false, TimeOfDay.EVENING),
+                new HabitHistoryEntry(TODAY, false, TimeOfDay.MORNING),
+                new HabitHistoryEntry(TODAY, false, TimeOfDay.EVENING));
+    }
+
+    @Test
+    void marksAndUnmarksSingleTimeOfDay() {
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+        when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
+        when(completionRepository.findByHabitIdInAndCompletedOnBetween(Set.of(1L), TODAY, TODAY))
+                .thenReturn(List.of(new HabitCompletion(1L, TODAY, TimeOfDay.EVENING, NOW)));
+
+        HabitOnDateResponse marked = habitService.markCompleted(USER_ID, 1L, TODAY, TimeOfDay.MORNING);
+
+        assertThat(marked.completions()).containsExactly(new TimeOfDayCompletion(TimeOfDay.MORNING, true),
+                new TimeOfDayCompletion(TimeOfDay.EVENING, true));
+        ArgumentCaptor<HabitCompletion> saved = ArgumentCaptor.forClass(HabitCompletion.class);
+        verify(completionRepository).save(saved.capture());
+        assertThat(saved.getValue().getTimeOfDay()).isEqualTo(TimeOfDay.MORNING);
+
+        HabitOnDateResponse unmarked = habitService.unmarkCompleted(USER_ID, 1L, TODAY, TimeOfDay.MORNING);
+
+        assertThat(unmarked.completions()).containsExactly(new TimeOfDayCompletion(TimeOfDay.MORNING, false),
+                new TimeOfDayCompletion(TimeOfDay.EVENING, true));
+        verify(completionRepository).deleteByHabitIdAndCompletedOnAndTimeOfDay(1L, TODAY, TimeOfDay.MORNING);
+    }
+
+    @Test
+    void rejectsCompletionWithoutTimeOfDayForActivityWithTimeOfDay() {
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING));
+        when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
+
+        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY, null))
+                .isInstanceOf(InvalidHabitDataException.class);
+        verify(completionRepository, never()).save(any(HabitCompletion.class));
+    }
+
+    @Test
+    void rejectsCompletionWithTimeOfDayMissingFromActivity() {
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING));
+        when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
+
+        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY, TimeOfDay.DAY))
+                .isInstanceOf(InvalidHabitDataException.class);
+        verify(completionRepository, never()).save(any(HabitCompletion.class));
+    }
+
+    @Test
+    void rejectsTimeOfDayForActivityWithoutTimeOfDay() {
+        Habit habit = habitWithId(1L, USER_ID, HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of());
+        when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
+
+        assertThatThrownBy(() -> habitService.markCompleted(USER_ID, 1L, TODAY, TimeOfDay.MORNING))
+                .isInstanceOf(InvalidHabitDataException.class);
+        verify(completionRepository, never()).save(any(HabitCompletion.class));
+    }
+
+    @Test
+    void createsPastCompletionsForEachTimeOfDay() {
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> {
+            Habit saved = invocation.getArgument(0);
+            setId(saved, 1L);
+            return saved;
+        });
+
+        habitService.create(USER_ID, new HabitRequest("Teeth", TODAY.minusDays(2), HabitFrequency.DAILY, null, HABIT,
+                List.of(TimeOfDay.MORNING, TimeOfDay.EVENING), true));
+
+        List<HabitCompletion> completions = capturedCompletions();
+        assertThat(completions).hasSize(4);
+        assertThat(completions).extracting(HabitCompletion::getTimeOfDay)
+                .containsExactly(TimeOfDay.MORNING, TimeOfDay.EVENING, TimeOfDay.MORNING, TimeOfDay.EVENING);
+    }
+
+    @Test
+    void removedTimeOfDayHidesItsCompletionsUntilRestored() {
+        Habit habit = habitWithSlots(1L, USER_ID, HABIT, "Teeth", TODAY, HabitFrequency.DAILY, Set.of(),
+                Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING));
+        when(habitRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(habit));
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(habitRepository.findScheduledOn(USER_ID, TODAY, TODAY.getDayOfWeek(), HabitFrequency.DAILY, null))
+                .thenReturn(List.of(habit));
+        when(completionRepository.findByHabitIdInAndCompletedOnBetween(Set.of(1L), TODAY, TODAY))
+                .thenReturn(List.of(new HabitCompletion(1L, TODAY, TimeOfDay.MORNING, NOW),
+                        new HabitCompletion(1L, TODAY, TimeOfDay.EVENING, NOW)));
+
+        habitService.update(USER_ID, 1L, new HabitRequest("Teeth", TODAY, HabitFrequency.DAILY, null, HABIT,
+                List.of(TimeOfDay.MORNING)));
+
+        HabitOnDateResponse afterRemove = habitService.listOnDate(USER_ID, TODAY, null).get(0);
+        assertThat(afterRemove.timeOfDay()).containsExactly(TimeOfDay.MORNING);
+        assertThat(afterRemove.completions()).containsExactly(new TimeOfDayCompletion(TimeOfDay.MORNING, true));
+
+        habitService.update(USER_ID, 1L, new HabitRequest("Teeth", TODAY, HabitFrequency.DAILY, null, HABIT,
+                List.of(TimeOfDay.MORNING, TimeOfDay.EVENING)));
+
+        HabitOnDateResponse afterRestore = habitService.listOnDate(USER_ID, TODAY, null).get(0);
+        assertThat(afterRestore.completions()).containsExactly(
+                new TimeOfDayCompletion(TimeOfDay.MORNING, true),
+                new TimeOfDayCompletion(TimeOfDay.EVENING, true));
+    }
+
+    @Test
+    void importActivityCreatesActivityWithTimeOfDayAndSavesSlotCompletions() {
+        when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "Teeth")).thenReturn(List.of());
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> {
+            Habit saved = invocation.getArgument(0);
+            setId(saved, 1L);
+            return saved;
+        });
+        when(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(eq(1L), any(LocalDate.class), any()))
+                .thenReturn(false);
+
+        ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Teeth",
+                LocalDate.of(2026, 5, 1), Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING),
+                List.of(imported(TimeOfDay.MORNING, LocalDate.of(2026, 5, 1)),
+                        imported(TimeOfDay.EVENING, LocalDate.of(2026, 5, 1))));
+
+        assertThat(result.created()).isTrue();
+        assertThat(result.savedCompletions()).isEqualTo(2);
+        assertThat(capturedCompletions()).extracting(HabitCompletion::getTimeOfDay)
+                .containsExactlyInAnyOrder(TimeOfDay.MORNING, TimeOfDay.EVENING);
+    }
+
+    @Test
+    void importActivityIgnoresTimeOfDayMissingFromExistingActivity() {
+        Habit habit = habitWithSlots(5L, USER_ID, HABIT, "Teeth", LocalDate.of(2026, 5, 1), HabitFrequency.DAILY,
+                Set.of(), Set.of(TimeOfDay.MORNING));
+        when(habitRepository.findByUserIdAndTypeAndNameOrderById(USER_ID, HABIT, "Teeth")).thenReturn(List.of(habit));
+        when(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(eq(5L), any(LocalDate.class), any()))
+                .thenReturn(false);
+
+        ImportedActivityResult result = habitService.importActivity(USER_ID, HABIT, "Teeth",
+                LocalDate.of(2026, 5, 1), Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING),
+                List.of(imported(TimeOfDay.MORNING, LocalDate.of(2026, 5, 1)),
+                        imported(TimeOfDay.EVENING, LocalDate.of(2026, 5, 1))));
+
+        assertThat(result.savedCompletions()).isEqualTo(1);
+        assertThat(capturedCompletions()).extracting(HabitCompletion::getTimeOfDay)
+                .containsExactly(TimeOfDay.MORNING);
+        assertThat(habit.getTimeOfDay()).containsExactly(TimeOfDay.MORNING);
+    }
+
+    private static ImportedCompletion imported(TimeOfDay timeOfDay, LocalDate date) {
+        return new ImportedCompletion(timeOfDay, date);
+    }
+
     private static Habit habitWithId(Long id, Long userId, ActivityType type, String name, LocalDate startDate,
             HabitFrequency frequency, Set<DayOfWeek> weekdays) {
-        Habit habit = new Habit(userId, type, name, startDate, frequency, weekdays, NOW);
+        return habitWithSlots(id, userId, type, name, startDate, frequency, weekdays, Set.of());
+    }
+
+    private static Habit habitWithSlots(Long id, Long userId, ActivityType type, String name, LocalDate startDate,
+            HabitFrequency frequency, Set<DayOfWeek> weekdays, Set<TimeOfDay> timeOfDay) {
+        Habit habit = new Habit(userId, type, name, startDate, frequency, weekdays, timeOfDay, NOW);
         setId(habit, id);
         return habit;
     }

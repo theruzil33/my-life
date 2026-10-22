@@ -116,6 +116,18 @@ class HabitRepositoryTest {
     }
 
     @Test
+    void persistsTimeOfDay() {
+        Habit habit = habitRepository.saveAndFlush(new Habit(userId, ActivityType.HABIT, "time-of-day", DATE,
+                HabitFrequency.DAILY, Set.of(), Set.of(TimeOfDay.MORNING, TimeOfDay.EVENING), NOW));
+        entityManager.flush();
+        entityManager.clear();
+
+        Habit reloaded = habitRepository.findById(habit.getId()).orElseThrow();
+
+        assertThat(reloaded.getTimeOfDay()).containsExactlyInAnyOrder(TimeOfDay.MORNING, TimeOfDay.EVENING);
+    }
+
+    @Test
     void persistsActivityType() {
         Habit task = saveTyped(userId, ActivityType.TASK, "task", DATE, HabitFrequency.DAILY, Set.of());
         entityManager.flush();
@@ -124,6 +136,23 @@ class HabitRepositoryTest {
         Habit reloaded = habitRepository.findById(task.getId()).orElseThrow();
 
         assertThat(reloaded.getType()).isEqualTo(ActivityType.TASK);
+    }
+
+    @Test
+    void deletingActivityRemovesItsTimeOfDay() {
+        Habit habit = habitRepository.saveAndFlush(new Habit(userId, ActivityType.HABIT, "time-of-day", DATE,
+                HabitFrequency.DAILY, Set.of(), Set.of(TimeOfDay.MORNING), NOW));
+        Long habitId = habit.getId();
+
+        habitRepository.delete(habit);
+        habitRepository.flush();
+
+        Number remaining = (Number) entityManager
+                .createNativeQuery("select count(*) from tracker_habit_time_of_day where habit_id = :id")
+                .setParameter("id", habitId)
+                .getSingleResult();
+
+        assertThat(remaining.longValue()).isZero();
     }
 
     @Test

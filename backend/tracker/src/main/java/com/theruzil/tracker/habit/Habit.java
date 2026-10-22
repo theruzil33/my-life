@@ -51,6 +51,12 @@ public class Habit {
     @Convert(converter = DayOfWeekConverter.class)
     private Set<DayOfWeek> weekdays = new LinkedHashSet<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "tracker_habit_time_of_day", joinColumns = @JoinColumn(name = "habit_id"))
+    @Column(name = "time_of_day", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private Set<TimeOfDay> timeOfDay = new LinkedHashSet<>();
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -62,15 +68,25 @@ public class Habit {
 
     public Habit(Long userId, ActivityType type, String name, LocalDate startDate, HabitFrequency frequency,
             Set<DayOfWeek> weekdays, Instant now) {
+        this(userId, type, name, startDate, frequency, weekdays, Set.of(), now);
+    }
+
+    public Habit(Long userId, ActivityType type, String name, LocalDate startDate, HabitFrequency frequency,
+            Set<DayOfWeek> weekdays, Set<TimeOfDay> timeOfDay, Instant now) {
         this.userId = userId;
         this.type = type;
         this.createdAt = now;
-        apply(name, startDate, frequency, weekdays, now);
+        apply(name, startDate, frequency, weekdays, timeOfDay, now);
     }
 
     public void update(String name, LocalDate startDate, HabitFrequency frequency, Set<DayOfWeek> weekdays,
             Instant now) {
-        apply(name, startDate, frequency, weekdays, now);
+        update(name, startDate, frequency, weekdays, Set.of(), now);
+    }
+
+    public void update(String name, LocalDate startDate, HabitFrequency frequency, Set<DayOfWeek> weekdays,
+            Set<TimeOfDay> timeOfDay, Instant now) {
+        apply(name, startDate, frequency, weekdays, timeOfDay, now);
     }
 
     public boolean isScheduledOn(LocalDate date) {
@@ -84,13 +100,17 @@ public class Habit {
     }
 
     private void apply(String name, LocalDate startDate, HabitFrequency frequency, Set<DayOfWeek> weekdays,
-            Instant now) {
+            Set<TimeOfDay> timeOfDay, Instant now) {
         this.name = name;
         this.startDate = startDate;
         this.frequency = frequency;
         this.weekdays.clear();
         if (frequency == HabitFrequency.SPECIFIC_WEEKDAYS && weekdays != null) {
             this.weekdays.addAll(weekdays);
+        }
+        this.timeOfDay.clear();
+        if (timeOfDay != null) {
+            this.timeOfDay.addAll(timeOfDay);
         }
         this.updatedAt = now;
     }
@@ -121,6 +141,10 @@ public class Habit {
 
     public Set<DayOfWeek> getWeekdays() {
         return weekdays;
+    }
+
+    public Set<TimeOfDay> getTimeOfDay() {
+        return timeOfDay;
     }
 
     public Instant getCreatedAt() {
