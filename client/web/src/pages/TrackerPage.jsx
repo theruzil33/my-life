@@ -1,24 +1,30 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
+import TodayTab from '../tracker/TodayTab'
 import HabitsTab from '../tracker/HabitsTab'
 import TasksTab from '../tracker/TasksTab'
 import StatisticsTab from '../tracker/StatisticsTab'
 import ImportFormModal from '../tracker/ImportFormModal'
 
+const TODAY_TAB = 'today'
 const HABITS_TAB = 'habits'
 const TASKS_TAB = 'tasks'
 const STATISTICS_TAB = 'statistics'
 
+const TAB_ORDER = [TODAY_TAB, HABITS_TAB, TASKS_TAB, STATISTICS_TAB]
+
 const TAB_LABELS = {
+  [TODAY_TAB]: 'Сегодня',
   [HABITS_TAB]: 'Привычки',
   [TASKS_TAB]: 'Задачи',
   [STATISTICS_TAB]: 'Статистика',
 }
 
 export default function TrackerPage() {
-  const [activeTab, setActiveTab] = useState(HABITS_TAB)
+  const [activeTab, setActiveTab] = useState(TODAY_TAB)
   const [openedTabs, setOpenedTabs] = useState({
-    [HABITS_TAB]: true,
+    [TODAY_TAB]: true,
+    [HABITS_TAB]: false,
     [TASKS_TAB]: false,
     [STATISTICS_TAB]: false,
   })
@@ -49,7 +55,7 @@ export default function TrackerPage() {
       </div>
 
       <div className="tracker-tabs" role="tablist" aria-label="Разделы трекера">
-        {[HABITS_TAB, TASKS_TAB, STATISTICS_TAB].map((tab) => (
+        {TAB_ORDER.map((tab) => (
           <button
             key={tab}
             type="button"
@@ -63,9 +69,15 @@ export default function TrackerPage() {
         ))}
       </div>
 
-      <div role="tabpanel" aria-label="Привычки" hidden={activeTab !== HABITS_TAB}>
-        <HabitsTab refreshToken={dataVersion} />
+      <div role="tabpanel" aria-label="Сегодня" hidden={activeTab !== TODAY_TAB}>
+        <TodayTab refreshToken={dataVersion} />
       </div>
+
+      {openedTabs[HABITS_TAB] && (
+        <div role="tabpanel" aria-label="Привычки" hidden={activeTab !== HABITS_TAB}>
+          <HabitsTab refreshToken={dataVersion} />
+        </div>
+      )}
 
       {openedTabs[TASKS_TAB] && (
         <div role="tabpanel" aria-label="Задачи" hidden={activeTab !== TASKS_TAB}>

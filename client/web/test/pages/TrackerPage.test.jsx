@@ -54,12 +54,19 @@ beforeEach(() => {
 })
 
 describe('TrackerPage', () => {
-  it('по умолчанию открывает вкладку привычек', async () => {
+  it('по умолчанию открывает вкладку «Сегодня» и показывает вкладки по порядку', async () => {
     renderTracker()
 
     expect(await screen.findByRole('heading', { name: 'Трекер привычек' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Привычки' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByLabelText('Дата')).toBeInTheDocument()
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Сегодня',
+      'Привычки',
+      'Задачи',
+      'Статистика',
+    ])
+    expect(screen.getByRole('tab', { name: 'Сегодня' })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByText('На сегодня активностей нет.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Дата')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('С')).not.toBeInTheDocument()
   })
 
@@ -75,7 +82,7 @@ describe('TrackerPage', () => {
       'true',
     )
     expect(await screen.findByLabelText('С')).toBeVisible()
-    expect(screen.getByLabelText('Дата')).not.toBeVisible()
+    expect(screen.queryByLabelText('Дата')).not.toBeInTheDocument()
   })
 
   it('переключается на вкладку задач и грузит только задачи', async () => {
@@ -97,27 +104,32 @@ describe('TrackerPage', () => {
     renderTracker()
 
     await screen.findByRole('heading', { name: 'Трекер привычек' })
-    fireEvent.change(document.getElementById('habits-date'), { target: { value: '2026-09-10' } })
-    expect(document.getElementById('habits-date').value).toBe('2026-09-10')
+    await user.click(screen.getByRole('tab', { name: 'Привычки' }))
+    fireEvent.change(await screen.findByLabelText('Дата'), { target: { value: '2026-09-10' } })
+    expect(screen.getByLabelText('Дата')).toHaveValue('2026-09-10')
 
     await user.click(screen.getByRole('tab', { name: 'Задачи' }))
     await user.click(screen.getByRole('tab', { name: 'Привычки' }))
 
-    expect(document.getElementById('habits-date').value).toBe('2026-09-10')
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Привычки' })).getByLabelText('Дата'),
+    ).toHaveValue('2026-09-10')
   })
 
   it('сохраняет выбранную дату при переключении вкладок', async () => {
     const user = userEvent.setup()
     renderTracker()
 
+    await screen.findByRole('heading', { name: 'Трекер привычек' })
+    await user.click(screen.getByRole('tab', { name: 'Привычки' }))
     const dateInput = await screen.findByLabelText('Дата')
     fireEvent.change(dateInput, { target: { value: '2026-09-10' } })
-    expect(dateInput.value).toBe('2026-09-10')
+    expect(dateInput).toHaveValue('2026-09-10')
 
     await user.click(screen.getByRole('tab', { name: 'Статистика' }))
     await user.click(screen.getByRole('tab', { name: 'Привычки' }))
 
-    expect(screen.getByLabelText('Дата').value).toBe('2026-09-10')
+    expect(screen.getByLabelText('Дата')).toHaveValue('2026-09-10')
   })
 
   it('перенаправляет неаутентифицированного пользователя на вход', async () => {

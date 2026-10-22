@@ -6,10 +6,7 @@ import HabitFormModal from './HabitFormModal'
 import RenameActivityModal from './RenameActivityModal'
 import TimeOfDayModal from './TimeOfDayModal'
 import { TIME_OF_DAY_LABELS } from './habitOptions'
-
-function pendingKey(id, slot) {
-  return `${id}:${slot ?? 'ANY'}`
-}
+import { useCompletionToggle } from './useCompletionToggle'
 
 export default function ActivityListTab({
   type,
@@ -26,8 +23,8 @@ export default function ActivityListTab({
   const [activities, setActivities] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const [actionError, setActionError] = useState(null)
-  const [pendingKeys, setPendingKeys] = useState([])
+  const { actionError, setActionError, completionFor, isPending, toggleCompleted } =
+    useCompletionToggle({ accessToken, date, setActivities })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState(null)
   const [timeOfDayTarget, setTimeOfDayTarget] = useState(null)
@@ -73,50 +70,6 @@ export default function ActivityListTab({
     setLoadError(null)
     setIsLoading(true)
     setDate(nextDate)
-  }
-
-  function completionFor(activity, slot) {
-    if (!slot) {
-      return activity.completed
-    }
-    return activity.completions?.find((entry) => entry.timeOfDay === slot)?.completed ?? false
-  }
-
-  function isPending(activity, slot) {
-    return pendingKeys.includes(pendingKey(activity.id, slot))
-  }
-
-  async function toggleCompleted(activity, slot) {
-    const key = pendingKey(activity.id, slot)
-    if (pendingKeys.includes(key)) {
-      return
-    }
-    setActionError(null)
-    setPendingKeys((keys) => [...keys, key])
-    try {
-      const updated = slot
-        ? activity.completions?.find((entry) => entry.timeOfDay === slot)?.completed
-          ? await trackerApi.unmarkCompleted(accessToken, activity.id, date, slot)
-          : await trackerApi.markCompleted(accessToken, activity.id, date, slot)
-        : activity.completed
-          ? await trackerApi.unmarkCompleted(accessToken, activity.id, date)
-          : await trackerApi.markCompleted(accessToken, activity.id, date)
-      setActivities((list) =>
-        list.map((item) =>
-          item.id === activity.id
-            ? {
-                ...item,
-                completed: updated.completed,
-                completions: updated.completions ?? item.completions,
-              }
-            : item,
-        ),
-      )
-    } catch (error) {
-      setActionError(error.message)
-    } finally {
-      setPendingKeys((keys) => keys.filter((item) => item !== key))
-    }
   }
 
   async function handleCreate(values) {
