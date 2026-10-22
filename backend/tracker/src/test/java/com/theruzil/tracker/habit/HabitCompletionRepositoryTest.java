@@ -60,6 +60,56 @@ class HabitCompletionRepositoryTest {
     }
 
     @Test
+    void storesTimeOfDayAndTreatsMissingValueAsAny() {
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, TimeOfDay.MORNING, NOW));
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE.minusDays(1), now()));
+
+        List<HabitCompletion> found = completionRepository
+                .findByHabitIdInAndCompletedOnBetween(List.of(habitId), DATE.minusDays(1), DATE);
+
+        assertThat(found).extracting(HabitCompletion::getTimeOfDay)
+                .containsExactlyInAnyOrder(TimeOfDay.MORNING, null);
+        assertThat(found).extracting(HabitCompletion::getTimeOfDayValue)
+                .containsExactlyInAnyOrder("MORNING", "ANY");
+    }
+
+    @Test
+    void allowsSameDateForDifferentTimeOfDay() {
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, now()));
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, TimeOfDay.MORNING, NOW));
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, TimeOfDay.EVENING, NOW));
+
+        assertThat(completionRepository.existsByHabitIdAndCompletedOn(habitId, DATE)).isTrue();
+        assertThat(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(habitId, DATE, null)).isTrue();
+        assertThat(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(habitId, DATE,
+                TimeOfDay.MORNING)).isTrue();
+        assertThat(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(habitId, DATE,
+                TimeOfDay.EVENING)).isTrue();
+    }
+
+    @Test
+    void rejectsDuplicateCompletionForSameTimeOfDay() {
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, TimeOfDay.MORNING, NOW));
+
+        assertThatThrownBy(() -> completionRepository
+                .saveAndFlush(new HabitCompletion(habitId, DATE, TimeOfDay.MORNING, NOW)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void deletesOnlyRequestedTimeOfDay() {
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, TimeOfDay.MORNING, NOW));
+        completionRepository.saveAndFlush(new HabitCompletion(habitId, DATE, TimeOfDay.EVENING, NOW));
+
+        completionRepository.deleteByHabitIdAndCompletedOnAndTimeOfDay(habitId, DATE, TimeOfDay.MORNING);
+
+        assertThat(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(habitId, DATE,
+                TimeOfDay.MORNING)).isFalse();
+        assertThat(completionRepository.existsByHabitIdAndCompletedOnAndTimeOfDay(habitId, DATE,
+                TimeOfDay.EVENING)).isTrue();
+    }
+
+    @Test
     void deletingMissingCompletionDoesNotFail() {
         completionRepository.deleteByHabitIdAndCompletedOn(habitId, DATE.minusDays(1));
 
@@ -91,6 +141,10 @@ class HabitCompletionRepositoryTest {
         habitRepository.flush();
 
         assertThat(completionRepository.existsByHabitIdAndCompletedOn(habitId, DATE)).isFalse();
+    }
+
+    private static Instant now() {
+        return NOW;
     }
 
     private static Long randomUserId() {

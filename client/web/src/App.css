@@ -170,6 +170,12 @@
   margin: 0;
 }
 
+.tracker-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .tracker-tabs {
   display: flex;
   justify-content: center;
@@ -248,6 +254,13 @@
   color: var(--text-h);
 }
 
+.habit-time-of-day {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
 .habit-actions {
   display: flex;
   gap: 8px;
@@ -262,6 +275,72 @@
   background: none;
   color: var(--text-h);
   cursor: pointer;
+}
+
+.today-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.today-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.today-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.today-group-current {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.today-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.today-group-title {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-h);
+}
+
+.today-group-now {
+  padding: 2px 8px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 12px;
+}
+
+.today-activity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.today-type {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text);
 }
 
 .tracker-fieldset {

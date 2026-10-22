@@ -4,6 +4,9 @@ import { useAuth } from '../auth/AuthContext'
 import { isFuture, todayIso } from './dates'
 import HabitFormModal from './HabitFormModal'
 import RenameActivityModal from './RenameActivityModal'
+import TimeOfDayModal from './TimeOfDayModal'
+import { TIME_OF_DAY_LABELS } from './habitOptions'
+import { useCompletionToggle } from './useCompletionToggle'
 
 export default function ActivityListTab({
   type,
@@ -13,16 +16,18 @@ export default function ActivityListTab({
   modalTitle,
   entityLabel,
   renameTitle,
+  refreshToken = 0,
 }) {
   const { accessToken } = useAuth()
   const [date, setDate] = useState(todayIso())
   const [activities, setActivities] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const [actionError, setActionError] = useState(null)
-  const [pendingIds, setPendingIds] = useState([])
+  const { actionError, setActionError, completionFor, isPending, toggleCompleted } =
+    useCompletionToggle({ accessToken, date, setActivities })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState(null)
+  const [timeOfDayTarget, setTimeOfDayTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [reloadCounter, setReloadCounter] = useState(0)
@@ -54,7 +59,7 @@ export default function ActivityListTab({
     return () => {
       cancelled = true
     }
-  }, [accessToken, date, type, reloadCounter])
+  }, [accessToken, date, type, reloadCounter, refreshToken])
 
   function handleDateChange(event) {
     const nextDate = event.target.value
@@ -65,26 +70,6 @@ export default function ActivityListTab({
     setLoadError(null)
     setIsLoading(true)
     setDate(nextDate)
-  }
-
-  async function toggleCompleted(activity) {
-    if (pendingIds.includes(activity.id)) {
-      return
-    }
-    setActionError(null)
-    setPendingIds((ids) => [...ids, activity.id])
-    try {
-      const updated = activity.completed
-        ? await trackerApi.unmarkCompleted(accessToken, activity.id, date)
-        : await trackerApi.markCompleted(accessToken, activity.id, date)
-      setActivities((list) =>
-        list.map((item) => (item.id === activity.id ? { ...item, completed: updated.completed } : item)),
-      )
-    } catch (error) {
-      setActionError(error.message)
-    } finally {
-      setPendingIds((ids) => ids.filter((id) => id !== activity.id))
-    }
   }
 
   async function handleCreate(values) {
@@ -102,10 +87,42 @@ export default function ActivityListTab({
       startDate: target.startDate,
       frequency: target.frequency,
       weekdays: target.weekdays ?? [],
+      timeOfDay: target.timeOfDay ?? [],
       type: target.type ?? type,
     })
     setActivities((list) => list.map((item) => (item.id === target.id ? { ...item, name: newName } : item)))
     setRenameTarget(null)
+  }
+
+  async function handleTimeOfDayChange(slots) {
+    const target = timeOfDayTarget
+    await trackerApi.update(accessToken, target.id, {
+      name: target.name,
+      startDate: target.startDate,
+      frequency: target.frequency,
+      weekdays: target.weekdays ?? [],
+      timeOfDay: slots,
+      type: target.type ?? type,
+    })
+    setActivities((list) =>
+      list.map((item) => {
+        if (item.id !== target.id) {
+          return item
+        }
+        const previous = new Map((item.completions ?? []).map((entry) => [entry.timeOfDay, entry.completed]))
+        const completions = slots.map((slot) => ({
+          timeOfDay: slot,
+          completed: previous.get(slot) ?? false,
+        }))
+        return {
+          ...item,
+          timeOfDay: slots,
+          completions,
+          completed: slots.length > 0 && completions.every((entry) => entry.completed),
+        }
+      }),
+    )
+    setTimeOfDayTarget(null)
   }
 
   async function handleDeleteConfirm() {
@@ -163,47 +180,87 @@ export default function ActivityListTab({
 
       {!isLoading && activities && activities.length > 0 && (
         <ul className="habits-list">
-          {activities.map((activity) => (
-            <li key={activity.id} className="habit-item">
-              <input
-                id={`${idPrefix}-completed-${activity.id}`}
-                type="checkbox"
-                className="habit-checkbox"
-                checked={activity.completed}
-                disabled={pendingIds.includes(activity.id)}
-                onChange={() => toggleCompleted(activity)}
-              />
-              <label htmlFor={`${idPrefix}-completed-${activity.id}`} className="habit-name">
-                {activity.name}
-              </label>
-              <div className="habit-actions">
-                <button
-                  type="button"
-                  className="habit-action"
-                  aria-label={`Переименовать ${activity.name}`}
-                  disabled={isDeleting && deleteTarget?.id === activity.id}
-                  onClick={() => {
-                    setActionError(null)
-                    setRenameTarget(activity)
-                  }}
-                >
-                  Переименовать
-                </button>
-                <button
-                  type="button"
-                  className="habit-action"
-                  aria-label={`Удалить ${activity.name}`}
-                  disabled={isDeleting && deleteTarget?.id === activity.id}
-                  onClick={() => {
-                    setActionError(null)
-                    setDeleteTarget(activity)
-                  }}
-                >
-                  Удалить
-                </button>
-              </div>
-            </li>
-          ))}
+          {activities.map((activity) => {
+            const slots = activity.timeOfDay ?? []
+            return (
+              <li key={activity.id} className="habit-item">
+                {slots.length > 0 ? (
+                  <div className="habit-time-of-day">
+                    <span className="habit-name">{activity.name}</span>
+                    <div className="weekday-options">
+                      {slots.map((slot) => {
+                        const label = TIME_OF_DAY_LABELS[slot] ?? slot
+                        return (
+                          <label key={slot} className="weekday-option">
+                            <input
+                              type="checkbox"
+                              className="habit-checkbox"
+                              aria-label={`${activity.name} — ${label}`}
+                              checked={completionFor(activity, slot)}
+                              disabled={isPending(activity, slot)}
+                              onChange={() => toggleCompleted(activity, slot)}
+                            />
+                            <span>{label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      id={`${idPrefix}-completed-${activity.id}`}
+                      type="checkbox"
+                      className="habit-checkbox"
+                      checked={activity.completed}
+                      disabled={isPending(activity, null)}
+                      onChange={() => toggleCompleted(activity, null)}
+                    />
+                    <label htmlFor={`${idPrefix}-completed-${activity.id}`} className="habit-name">
+                      {activity.name}
+                    </label>
+                  </>
+                )}
+                <div className="habit-actions">
+                  <button
+                    type="button"
+                    className="habit-action"
+                    aria-label={`Время суток ${activity.name}`}
+                    onClick={() => {
+                      setActionError(null)
+                      setTimeOfDayTarget(activity)
+                    }}
+                  >
+                    Время суток
+                  </button>
+                  <button
+                    type="button"
+                    className="habit-action"
+                    aria-label={`Переименовать ${activity.name}`}
+                    disabled={isDeleting && deleteTarget?.id === activity.id}
+                    onClick={() => {
+                      setActionError(null)
+                      setRenameTarget(activity)
+                    }}
+                  >
+                    Переименовать
+                  </button>
+                  <button
+                    type="button"
+                    className="habit-action"
+                    aria-label={`Удалить ${activity.name}`}
+                    disabled={isDeleting && deleteTarget?.id === activity.id}
+                    onClick={() => {
+                      setActionError(null)
+                      setDeleteTarget(activity)
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -224,6 +281,14 @@ export default function ActivityListTab({
           title={renameTitle}
           onClose={() => setRenameTarget(null)}
           onSubmit={handleRename}
+        />
+      )}
+
+      {timeOfDayTarget && (
+        <TimeOfDayModal
+          initialTimeOfDay={timeOfDayTarget.timeOfDay ?? []}
+          onClose={() => setTimeOfDayTarget(null)}
+          onSubmit={handleTimeOfDayChange}
         />
       )}
 

@@ -11,8 +11,8 @@ function withQuery(path, params) {
   return serialized === '' ? path : `${path}?${serialized}`
 }
 
-function activityBody({ name, startDate, frequency, weekdays, type, markPastCompleted }) {
-  const body = { name, startDate, frequency, type }
+function activityBody({ name, startDate, frequency, weekdays, type, timeOfDay, markPastCompleted }) {
+  const body = { name, startDate, frequency, type, timeOfDay: timeOfDay ?? [] }
   if (frequency === 'SPECIFIC_WEEKDAYS') {
     body.weekdays = weekdays ?? []
   }
@@ -57,17 +57,30 @@ export const trackerApi = {
     })
   },
 
-  markCompleted(token, habitId, date) {
-    return request(`/tracker/habits/${habitId}/completions/${date}`, {
+  markCompleted(token, habitId, date, timeOfDay) {
+    return request(withQuery(`/tracker/habits/${habitId}/completions/${date}`, { timeOfDay }), {
       method: 'PUT',
       token,
       requiresAuth: true,
     })
   },
 
-  unmarkCompleted(token, habitId, date) {
-    return request(`/tracker/habits/${habitId}/completions/${date}`, {
+  unmarkCompleted(token, habitId, date, timeOfDay) {
+    return request(withQuery(`/tracker/habits/${habitId}/completions/${date}`, { timeOfDay }), {
       method: 'DELETE',
+      token,
+      requiresAuth: true,
+    })
+  },
+
+  importFile(token, { year, month, file }) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('year', year)
+    formData.append('month', month)
+    return request('/tracker/imports', {
+      method: 'POST',
+      body: formData,
       token,
       requiresAuth: true,
     })

@@ -9,6 +9,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import com.theruzil.tracker.habit.HabitNotFoundException;
 import com.theruzil.tracker.habit.InvalidHabitDataException;
+import com.theruzil.tracker.importing.InvalidImportDataException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -16,6 +17,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidHabitDataException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiError handleInvalidHabitData(InvalidHabitDataException ex) {
+        return new ApiError(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidImportDataException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiError handleInvalidImportData(InvalidImportDataException ex) {
         return new ApiError(ex.getMessage());
     }
 

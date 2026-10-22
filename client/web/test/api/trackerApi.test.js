@@ -46,7 +46,7 @@ describe('trackerApi', () => {
 
     expect(request).toHaveBeenCalledWith('/tracker/habits', {
       method: 'POST',
-      body: { name: 'Зарядка', startDate: '2026-09-17', frequency: 'DAILY', type: 'HABIT' },
+      body: { name: 'Зарядка', startDate: '2026-09-17', frequency: 'DAILY', type: 'HABIT', timeOfDay: [] },
       token: 'token',
       requiresAuth: true,
     })
@@ -71,6 +71,7 @@ describe('trackerApi', () => {
         startDate: '2026-09-01',
         frequency: 'DAILY',
         type: 'HABIT',
+        timeOfDay: [],
         markPastCompleted: true,
       },
       token: 'token',
@@ -91,7 +92,7 @@ describe('trackerApi', () => {
 
     expect(request).toHaveBeenCalledWith('/tracker/habits', {
       method: 'POST',
-      body: { name: 'Бег', startDate: '2026-09-01', frequency: 'DAILY', type: 'HABIT' },
+      body: { name: 'Бег', startDate: '2026-09-01', frequency: 'DAILY', type: 'HABIT', timeOfDay: [] },
       token: 'token',
       requiresAuth: true,
     })
@@ -116,6 +117,7 @@ describe('trackerApi', () => {
         frequency: 'SPECIFIC_WEEKDAYS',
         weekdays: ['MONDAY', 'WEDNESDAY'],
         type: 'TASK',
+        timeOfDay: [],
       },
       token: 'token',
       requiresAuth: true,
@@ -141,6 +143,7 @@ describe('trackerApi', () => {
         frequency: 'SPECIFIC_WEEKDAYS',
         weekdays: ['MONDAY'],
         type: 'HABIT',
+        timeOfDay: [],
       },
       token: 'token',
       requiresAuth: true,
@@ -160,10 +163,85 @@ describe('trackerApi', () => {
 
     expect(request).toHaveBeenCalledWith('/tracker/habits/4', {
       method: 'PUT',
-      body: { name: 'Новое имя', startDate: '2026-09-01', frequency: 'DAILY', type: 'TASK' },
+      body: { name: 'Новое имя', startDate: '2026-09-01', frequency: 'DAILY', type: 'TASK', timeOfDay: [] },
       token: 'token',
       requiresAuth: true,
     })
+  })
+
+
+  it('передаёт части дня при создании', async () => {
+    request.mockResolvedValue({ id: 8 })
+
+    await trackerApi.create('token', {
+      name: 'Чистил зубы',
+      startDate: '2026-09-17',
+      frequency: 'DAILY',
+      weekdays: [],
+      type: 'HABIT',
+      timeOfDay: ['MORNING', 'EVENING'],
+    })
+
+    expect(request).toHaveBeenCalledWith('/tracker/habits', {
+      method: 'POST',
+      body: {
+        name: 'Чистил зубы',
+        startDate: '2026-09-17',
+        frequency: 'DAILY',
+        type: 'HABIT',
+        timeOfDay: ['MORNING', 'EVENING'],
+      },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('передаёт части дня при обновлении', async () => {
+    request.mockResolvedValue({ id: 8 })
+
+    await trackerApi.update('token', 8, {
+      name: 'Чистил зубы',
+      startDate: '2026-09-17',
+      frequency: 'DAILY',
+      weekdays: [],
+      type: 'HABIT',
+      timeOfDay: ['MORNING'],
+    })
+
+    expect(request).toHaveBeenCalledWith('/tracker/habits/8', {
+      method: 'PUT',
+      body: {
+        name: 'Чистил зубы',
+        startDate: '2026-09-17',
+        frequency: 'DAILY',
+        type: 'HABIT',
+        timeOfDay: ['MORNING'],
+      },
+      token: 'token',
+      requiresAuth: true,
+    })
+  })
+
+  it('отмечает часть дня через query-параметр', async () => {
+    request.mockResolvedValue({ completed: false })
+
+    await trackerApi.markCompleted('token', 42, '2026-09-17', 'MORNING')
+
+    expect(request).toHaveBeenCalledWith(
+      '/tracker/habits/42/completions/2026-09-17?timeOfDay=MORNING',
+      { method: 'PUT', token: 'token', requiresAuth: true },
+    )
+  })
+
+  it('отменяет часть дня через query-параметр', async () => {
+    request.mockResolvedValue({ completed: false })
+
+    await trackerApi.unmarkCompleted('token', 42, '2026-09-17', 'EVENING')
+
+    expect(request).toHaveBeenCalledWith(
+      '/tracker/habits/42/completions/2026-09-17?timeOfDay=EVENING',
+      { method: 'DELETE', token: 'token', requiresAuth: true },
+    )
   })
 
   it('удаляет активность через DELETE', async () => {

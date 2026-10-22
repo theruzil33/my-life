@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.theruzil.tracker.habit.ActivityType;
 import com.theruzil.tracker.habit.HabitService;
+import com.theruzil.tracker.habit.TimeOfDay;
 import com.theruzil.tracker.habit.dto.HabitHistoryResponse;
 import com.theruzil.tracker.habit.dto.HabitOnDateResponse;
 import com.theruzil.tracker.habit.dto.HabitRequest;
@@ -69,13 +70,15 @@ public class HabitController {
 
     @PutMapping("/{id}/completions/{date}")
     public HabitOnDateResponse markCompleted(@RequestAttribute(UserIdFilter.USER_ID_ATTRIBUTE) Long userId,
-            @PathVariable Long id, @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return habitService.markCompleted(userId, id, date);
+            @PathVariable Long id, @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) TimeOfDay timeOfDay) {
+        return habitService.markCompleted(userId, id, date, timeOfDay);
     }
 
     @DeleteMapping("/{id}/completions/{date}")
     public HabitOnDateResponse unmarkCompleted(@RequestAttribute(UserIdFilter.USER_ID_ATTRIBUTE) Long userId,
-            @PathVariable Long id, @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return habitService.unmarkCompleted(userId, id, date);
+            @PathVariable Long id, @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) TimeOfDay timeOfDay) {
+        return habitService.unmarkCompleted(userId, id, date, timeOfDay);
     }
 }
