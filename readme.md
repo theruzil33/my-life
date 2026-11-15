@@ -217,3 +217,37 @@ cd backend/finance && ./mvnw spring-boot:run
 # frontend (Vite dev server с проксированием /auth, /tracker и /finances на gateway)
 cd client/web && npm ci && npm run dev
 ```
+
+## Несколько рабочих копий (git worktree)
+
+Каждая рабочая копия может независимо поднимать свой набор контейнеров: со
+своим портом, своим compose-проектом и своей базой. Это удобно, когда над
+проектом идёт несколько независимых изменений.
+
+```bash
+git worktree add ../my-life-feature feat/my-change
+cd ../my-life-feature
+
+./scripts/dev-env.sh    # собственный .env и npm ci
+./scripts/dev-up.sh     # контейнеры этой копии
+./scripts/dev-down.sh   # остановить (данные БД сохраняются)
+```
+
+`dev-env.sh` выводит значения из имени ветки и записывает их в `.env` копии:
+
+| Переменная | Значение |
+| --- | --- |
+| `WEB_PORT` | 8090–8139 (детерминированно от имени ветки) |
+| `POSTGRES_DB` | `my_life_<ветка>` |
+| `COMPOSE_PROJECT_NAME` | `my-life-<ветка>` — отдельные контейнеры, сеть и том БД |
+
+Секреты (`POSTGRES_PASSWORD`, `GATEWAY_JWT_SECRET`) копируются из `.env`
+основного checkout'а, а если его нет — генерируются. Скрипт идемпотентен:
+повторный запуск сохраняет прежние значения и не переустанавливает
+`node_modules`; флаг `--skip-npm` пропускает установку зависимостей.
+
+В основном checkout'е (не worktree) `dev-env.sh` ничего не меняет, чтобы не
+переименовать базу и не сменить порт.
+
+Остановить одну копию: `./scripts/dev-down.sh`, удалить вместе с данными БД —
+`./scripts/dev-down.sh -v`.
