@@ -5,6 +5,7 @@
 - `backend/gateway` — Spring Boot API Gateway: аутентификация (JWT + refresh-cookie) и проксирование запросов к сервисам (порт 8080).
 - `backend/tracker` — Spring Boot сервис трекера привычек (порт 8081, context-path `/tracker`).
 - `backend/finance` — Spring Boot сервис финансов: счета пользователя (порт 8082, context-path `/finances`).
+- `backend/media` — Spring Boot сервис медиатеки: фильмы и сериалы, книги и игры (порт 8083, context-path `/media`).
 - `client/web` — SPA на React + Vite, раздаётся через nginx (порт 80).
 - `postgres` — общая база данных `my_life`.
 
@@ -15,12 +16,13 @@
             ├── /              → статика SPA
             ├── /auth/*        → gateway:8080
             ├── /tracker/*     → gateway:8080 → tracker:8081
-            └── /finances/*    → gateway:8080 → finance:8082
-postgres используется сервисами gateway, tracker и finance
+            ├── /finances/*    → gateway:8080 → finance:8082
+            └── /media/*       → gateway:8080 → media:8083
+postgres используется сервисами gateway, tracker, finance и media
 ```
 
-Наружу открывается только `web` (`WEB_PORT`). `gateway`, `tracker`, `finance` и
-`postgres` доступны только внутри docker-сети.
+Наружу открывается только `web` (`WEB_PORT`). `gateway`, `tracker`, `finance`,
+`media` и `postgres` доступны только внутри docker-сети.
 
 ## Запуск на сервере
 
@@ -90,11 +92,12 @@ Docker Hub при пуше тега вида `v<число>.<число>.<чис
 | `DOCKERHUB_USERNAME` | Логин Docker Hub |
 | `DOCKERHUB_TOKEN` | [Access Token](https://hub.docker.com/settings/security) Docker Hub (не пароль) |
 
-Публикуются четыре образа:
+Публикуются пять образов:
 
 - `<DOCKERHUB_USERNAME>/my-life-gateway:<тег>`
 - `<DOCKERHUB_USERNAME>/my-life-tracker:<тег>`
 - `<DOCKERHUB_USERNAME>/my-life-finance:<тег>`
+- `<DOCKERHUB_USERNAME>/my-life-media:<тег>`
 - `<DOCKERHUB_USERNAME>/my-life-web:<тег>`
 
 Запуск публикации:
@@ -180,18 +183,19 @@ GATEWAY_AUTH_COOKIE_SAME_SITE=Lax
 refresh-cookie и вход не будет работать.
 
 `VITE_API_BASE_URL` нужен, только если фронтенд и API расположены на разных
-origin. При штатной схеме (nginx проксирует `/auth`, `/tracker` и `/finances`)
+origin. При штатной схеме (nginx проксирует `/auth`, `/tracker`, `/finances` и `/media`)
 оставьте его пустым. Учтите: это параметр сборки, после изменения нужен
 `docker compose up -d --build web`.
 
 ## Особенности
 
 - `gateway`, `tracker` и `finance` используют одну базу `my_life`, но разные таблицы
-  истории Flyway. `tracker` и `finance` выполняют baseline поверх схемы, созданной
-  `gateway`, поэтому в `docker-compose.yml` они дожидаются healthcheck `gateway`.
+  истории Flyway. `tracker`, `finance` и `media` выполняют baseline поверх схемы,
+  созданной `gateway`, поэтому в `docker-compose.yml` они дожидаются healthcheck
+  `gateway`.
   Менять порядок запуска этих сервисов не нужно.
-- Наружу открыт только `web`; `gateway`, `tracker`, `finance` и `postgres` доступны
-  только внутри docker-сети.
+- Наружу открыт только `web`; `gateway`, `tracker`, `finance`, `media` и `postgres`
+  доступны только внутри docker-сети.
 - Данные PostgreSQL хранятся в volume `postgres-data` и переживают
   `docker compose down` (удаляются только с флагом `-v`).
 
@@ -214,6 +218,9 @@ cd backend/tracker && ./mvnw spring-boot:run
 # finance (по умолчанию :8082)
 cd backend/finance && ./mvnw spring-boot:run
 
-# frontend (Vite dev server с проксированием /auth, /tracker и /finances на gateway)
+# media (по умолчанию :8083)
+cd backend/media && ./mvnw spring-boot:run
+
+# frontend (Vite dev server с проксированием /auth, /tracker, /finances и /media на gateway)
 cd client/web && npm ci && npm run dev
 ```

@@ -53,4 +53,5 @@ jobs:
           build my-life-gateway ./backend/gateway
           build my-life-tracker ./backend/tracker
           build my-life-finance ./backend/finance
+          build my-life-media   ./backend/media
           build my-life-web     ./client/web

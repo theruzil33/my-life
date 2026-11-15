@@ -86,6 +86,8 @@ class ProxyRoutingTest {
         registry.add("gateway.routes[1].target-base-url", () -> "http://127.0.0.1:1");
         registry.add("gateway.routes[2].prefix", () -> "/finances");
         registry.add("gateway.routes[2].target-base-url", () -> STUB_BASE_URL);
+        registry.add("gateway.routes[3].prefix", () -> "/media");
+        registry.add("gateway.routes[3].target-base-url", () -> STUB_BASE_URL);
     }
 
     @AfterAll
@@ -138,6 +140,28 @@ class ProxyRoutingTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(body(response)).contains("\"path\":\"/finances/accounts\"");
         assertThat(body(response)).contains("\"userId\":\"42\"");
+    }
+
+    @Test
+    void routesMediaPrefixToConfiguredServiceWithUserId() {
+        String token = jwtService.issueAccessToken(42L);
+
+        ResponseEntity<byte[]> response = call(HttpMethod.GET, "/media/items?type=BOOK", token, null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(body(response)).contains("\"path\":\"/media/items\"");
+        assertThat(body(response)).contains("\"query\":\"type=BOOK\"");
+        assertThat(body(response)).contains("\"userId\":\"42\"");
+    }
+
+    @Test
+    void mediaRouteWithoutTokenIsRejectedBeforeProxying() {
+        int requestsBefore = STUB_REQUEST_COUNT.get();
+
+        ResponseEntity<byte[]> response = call(HttpMethod.GET, "/media/items", null, null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(STUB_REQUEST_COUNT.get()).isEqualTo(requestsBefore);
     }
 
     @Test
