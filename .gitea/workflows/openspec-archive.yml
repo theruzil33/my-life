@@ -1,0 +1,152 @@
+name: OpenSpec Archive
+
+# Архивация завершённых изменений OpenSpec.
+#
+# СЕЙЧАС ВЫКЛЮЧЕН: единственный триггер — ручной запуск (workflow_dispatch),
+# автоматического архива после мержа нет.
+#
+# Чтобы включить автоматический архив после мержа PR в master, добавьте блок
+# push в on: — мерж PR в Gitea публикует push-событие для master, поэтому
+# отдельный триггер pull_request не нужен:
+#
+#   on:
+#     push:
+#       branches: [master]
+#       paths:
+#         - 'openspec/changes/**'
+#     workflow_dispatch:
+#       inputs: ...
+#
+# Нужен секрет репозитория ARCHIVE_TOKEN — токен с правом записи в репозиторий
+# (scope write:repository), от имени которого будет создаваться коммит архива.
+# Без него архив выполнится, а push упадёт с понятной ошибкой.
+
+on:
+  workflow_dispatch:
+    inputs:
+      change:
+        description: 'Имя изменения; пусто — все завершённые'
+        required: false
+        default: ''
+      dry_run:
+        description: 'true — только проверить и показать план, false — архивировать и запушить'
+        required: false
+        default: 'true'
+
+concurrency:
+  group: openspec-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Установить OpenSpec CLI
+        run: |
+          set -eu
+          node --version
+          npm --version
+          npm install -g @fission-ai/openspec@1.13.0
+          openspec --version
+
+      - name: Выбрать изменения
+        id: select
+        env:
+          WANTED: ${{ github.event.inputs.change }}
+        run: |
+          set -euo pipefail
+          names=$(openspec list --json | node -e '
+            let raw = ""
+            process.stdin.setEncoding("utf8")
+            process.stdin.on("data", (chunk) => { raw += chunk })
+            process.stdin.on("end", () => {
+              const wanted = (process.env.WANTED || "").trim()
+              const parsed = JSON.parse(raw)
+              const changes = parsed.changes || []
+              const complete = changes.filter((change) => change.status === "complete")
+              const selected = wanted
+                ? complete.filter((change) => change.name === wanted)
+                : complete
+              if (wanted && selected.length === 0) {
+                console.error("Изменение \"" + wanted + "\" не найдено среди завершённых")
+                process.exit(1)
+              }
+              process.stdout.write(selected.map((change) => change.name).join("\n"))
+            })
+          ')
+          if [ -z "$names" ]; then
+            echo "Завершённых незаархивенных изменений нет"
+          else
+            echo "Изменения к архивации: $names"
+          fi
+          {
+            echo "names<<EOF"
+            echo "$names"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Архивировать изменения
+        id: archive
+        if: steps.select.outputs.names != ''
+        env:
+          NAMES: ${{ steps.select.outputs.names }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          dry_run=true
+          if [ "${DRY_RUN:-true}" = "false" ]; then
+            dry_run=false
+          fi
+          archived=""
+          while IFS= read -r name; do
+            [ -z "$name" ] && continue
+            echo "--- Валидация $name"
+            openspec validate "$name" --strict
+            if [ "$dry_run" = "true" ]; then
+              openspec status --change "$name"
+              echo "--- (dry-run) архив $name не выполняется"
+              continue
+            fi
+            openspec archive "$name" --yes
+            archived="$archived $name"
+          done <<< "$NAMES"
+          echo "archived=${archived# }" >> "$GITHUB_OUTPUT"
+
+      - name: Закоммитить архив
+        id: commit
+        if: steps.archive.outputs.archived != ''
+        env:
+          ARCHIVED: ${{ steps.archive.outputs.archived }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Изменений после архивации нет"
+            exit 0
+          fi
+          git config user.name "openspec-archive-bot"
+          git config user.email "openspec-archive-bot@localhost"
+          git add -A
+          git commit -m "chore(openspec): archive ${ARCHIVED// /, } [skip ci]"
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push в master
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          ARCHIVE_TOKEN: ${{ secrets.ARCHIVE_TOKEN }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          if [ -z "${ARCHIVE_TOKEN:-}" ]; then
+            echo "::error::Секрет ARCHIVE_TOKEN не задан. Коммит архива создан локально, но не запушен."
+            exit 1
+          fi
+          scheme="${REPO_URL%%://*}"
+          rest="${REPO_URL#*://}"
+          git push "${scheme}://x-access-token:${ARCHIVE_TOKEN}@${rest}" HEAD:master
