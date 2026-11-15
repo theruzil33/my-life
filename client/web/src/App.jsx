@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import TrackerPage from './pages/TrackerPage'
 import FinancesPage from './pages/FinancesPage'
+import MediaPage from './pages/MediaPage'
 import './App.css'
 
 function App() {
@@ -33,6 +34,14 @@ function App() {
         element={
           <RequireAuth>
             <FinancesPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/media"
+        element={
+          <RequireAuth>
+            <MediaPage />
           </RequireAuth>
         }
       />

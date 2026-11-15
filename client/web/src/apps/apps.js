@@ -14,6 +14,13 @@ export const APPS = [
     enabled: true,
   },
   {
+    id: 'media',
+    title: 'Медиатека',
+    description: 'Фильмы, книги и игры',
+    path: '/media',
+    enabled: true,
+  },
+  {
     id: 'notes',
     title: 'Заметки',
     description: 'Скоро',

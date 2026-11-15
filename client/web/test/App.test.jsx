@@ -10,6 +10,15 @@ vi.mock('../src/api/authApi', () => ({
   authApi: { login: vi.fn(), register: vi.fn(), refresh: vi.fn(), logout: vi.fn() },
 }))
 
+vi.mock('../src/api/mediaApi', () => ({
+  mediaApi: {
+    list: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  },
+}))
+
 vi.mock('../src/api/financeApi', () => ({
   financeApi: {
     getBalance: vi.fn(),
@@ -27,6 +36,7 @@ vi.mock('../src/api/financeApi', () => ({
 
 import { authApi } from '../src/api/authApi'
 import { financeApi } from '../src/api/financeApi'
+import { mediaApi } from '../src/api/mediaApi'
 
 function renderApp(initialEntries) {
   return render(
@@ -45,6 +55,7 @@ beforeEach(() => {
   financeApi.getBalance.mockResolvedValue({ startingBalance: 0, amount: 0 })
   financeApi.listCategories.mockResolvedValue([])
   financeApi.listOperationsByDate.mockResolvedValue([])
+  mediaApi.list.mockResolvedValue([])
 })
 
 describe('App', () => {
@@ -99,5 +110,20 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Вход' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Финансы' })).not.toBeInTheDocument()
+  })
+
+  it('открывает страницу медиатеки для аутентифицированного пользователя', async () => {
+    authApi.refresh.mockResolvedValue({ accessToken: 'jwt-token', email: 'user@example.com' })
+
+    renderApp(['/media'])
+
+    expect(await screen.findByRole('heading', { name: 'Медиатека' })).toBeInTheDocument()
+  })
+
+  it('перенаправляет неаутентифицированного пользователя с медиатеки на вход', async () => {
+    renderApp(['/media'])
+
+    expect(await screen.findByRole('heading', { name: 'Вход' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Медиатека' })).not.toBeInTheDocument()
   })
 })

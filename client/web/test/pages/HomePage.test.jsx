@@ -19,6 +19,7 @@ function renderHub(initialEntries = ['/']) {
           <Route path="/" element={<HomePage />} />
           <Route path="/tracker" element={<p>Страница трекера</p>} />
           <Route path="/finances" element={<p>Страница финансов</p>} />
+          <Route path="/media" element={<p>Страница медиатеки</p>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -39,11 +40,12 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument()
   })
 
-  it('показывает активные карточки трекера и финансов и неактивную заглушку', async () => {
+  it('показывает активные карточки трекера, финансов и медиатеки и неактивную заглушку', async () => {
     renderHub()
 
     expect(await screen.findByRole('link', { name: /Трекер/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Финансы/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Медиатека/ })).toBeInTheDocument()
 
     const placeholder = screen.getByText('Заметки').closest('[aria-disabled="true"]')
     expect(placeholder).not.toBeNull()
@@ -66,6 +68,15 @@ describe('HomePage', () => {
     await user.click(await screen.findByRole('link', { name: /Финансы/ }))
 
     expect(await screen.findByText('Страница финансов')).toBeInTheDocument()
+  })
+
+  it('открывает медиатеку по клику на карточку', async () => {
+    const user = userEvent.setup()
+    renderHub()
+
+    await user.click(await screen.findByRole('link', { name: /Медиатека/ }))
+
+    expect(await screen.findByText('Страница медиатеки')).toBeInTheDocument()
   })
 
   it('не выполняет переход по карточке-заглушке', async () => {
